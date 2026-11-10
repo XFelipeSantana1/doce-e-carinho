@@ -1,0 +1,1 @@
+{"name":"confeitaria-atendimento","private":true,"type":"module","scripts":{"start":"node src/server.mjs","test":"node --test"},"dependencies":{"redis":"^4.7.0"}}

@@ -1,0 +1,38 @@
+// Trilha de auditoria: histórico do que o gestor mudou no painel.
+
+import type { Registro } from "../../types";
+import { requisitar } from "./base";
+import { normalizarDataApi } from '../dataApi';
+
+interface RespostaPaginada {
+  registros: Array<Record<string, unknown>>;
+  total: number;
+  limite: number;
+  deslocamento: number;
+}
+
+/** GET /api/registros?limite=&offset= — mais recentes primeiro. */
+export async function listarRegistros(
+  token: string,
+  limite: number,
+  deslocamento: number,
+): Promise<{ registros: Registro[]; total: number; limite: number }> {
+  const dados = await requisitar<RespostaPaginada>(
+    `/registros?limite=${limite}&offset=${deslocamento}`,
+    token,
+  );
+  return {
+    registros: dados.registros.map((linha) => ({
+      id: Number(linha.id),
+      usuario_nome: String(linha.usuario_nome ?? ""),
+      acao: String(linha.acao ?? "") as Registro["acao"],
+      registro_id: linha.registro_id === null ? null : Number(linha.registro_id),
+      descricao: String(linha.descricao ?? ""),
+      antes: (linha.antes ?? null) as Record<string, unknown> | null,
+      depois: (linha.depois ?? null) as Record<string, unknown> | null,
+      criado_em: normalizarDataApi(linha.criado_em),
+    })),
+    total: Number(dados.total) || 0,
+    limite: Number(dados.limite) || limite,
+  };
+}

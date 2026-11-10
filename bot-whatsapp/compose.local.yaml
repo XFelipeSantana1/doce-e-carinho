@@ -1,0 +1,64 @@
+name: confeitaria-bot-local
+services:
+  atendimento:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - redis
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      BACKEND_URL: http://host.docker.internal:3000/api
+      BOT_API_KEY: ${BOT_API_KEY:?configure .env.local}
+      BOT_WEBHOOK_KEY: ${BOT_WEBHOOK_KEY:?configure .env.local}
+      BOT_TEST_PHONE: ${BOT_TEST_PHONE:?configure .env.local}
+      WAHA_API_KEY: ${WAHA_API_KEY:?configure .env.local}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?configure .env.local}
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      TZ: America/Sao_Paulo
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      N8N_HOST: localhost
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      N8N_EDITOR_BASE_URL: http://localhost:5678/
+      WEBHOOK_URL: http://n8n:5678/
+      N8N_SECURE_COOKIE: "false"
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?configure .env.local}
+      N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS: "true"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+    volumes:
+      - n8n_data:/home/node/.n8n
+  waha:
+    image: devlikeapro/waha:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      TZ: America/Sao_Paulo
+      WAHA_API_KEY: ${WAHA_API_KEY:?configure .env.local}
+      WAHA_DASHBOARD_USERNAME: admin
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?configure .env.local}
+      WHATSAPP_SWAGGER_USERNAME: admin
+      WHATSAPP_SWAGGER_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?configure .env.local}
+    volumes:
+      - waha_sessions:/app/.sessions
+      - waha_media:/app/.media
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?configure .env.local}
+    command: ["/bin/sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    volumes:
+      - redis_data:/data
+volumes:
+  n8n_data:
+  waha_sessions:
+  waha_media:
+  redis_data:

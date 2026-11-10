@@ -1,0 +1,11 @@
+{
+  "id": "doceCarinhoBotTeste",
+  "name": "Doce & Carinho — Atendimento de teste",
+  "active": false,
+  "nodes": [
+    {"id":"entrada","name":"Mensagem do WhatsApp","type":"n8n-nodes-base.webhook","typeVersion":2,"position":[0,0],"webhookId":"doce-carinho-teste","parameters":{"httpMethod":"POST","path":"confeitaria-whatsapp-teste","authentication":"headerAuth","responseMode":"lastNode","options":{}},"credentials":{"httpHeaderAuth":{"id":"doceBotEntrada","name":"WAHA entrada local"}}},
+    {"id":"atender","name":"Conduzir atendimento","type":"n8n-nodes-base.httpRequest","typeVersion":4.2,"position":[300,0],"retryOnFail":true,"maxTries":3,"waitBetweenTries":2000,"parameters":{"method":"POST","url":"http://atendimento:3002/message","authentication":"genericCredentialType","genericAuthType":"httpHeaderAuth","sendBody":true,"specifyBody":"json","jsonBody":"={{ $json.body }}","options":{"timeout":90000}},"credentials":{"httpHeaderAuth":{"id":"doceBotInterno","name":"Atendimento interno local"}}}
+  ],
+  "connections":{"Mensagem do WhatsApp":{"main":[[{"node":"Conduzir atendimento","type":"main","index":0}]]}},
+  "settings":{"executionOrder":"v1","saveDataSuccessExecution":"none","saveDataErrorExecution":"none"}
+}
