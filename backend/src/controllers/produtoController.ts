@@ -87,6 +87,9 @@ function erroNosCampos(campos: {
   if (typeof campos.descricao === "string" && campos.descricao.length > LIMITE.descricao) {
     return `A descrição pode ter no máximo ${LIMITE.descricao} caracteres.`;
   }
+  if (campos.descricao != null && typeof campos.descricao !== "string") return "Descrição inválida.";
+  if (campos.imagem_url != null && typeof campos.imagem_url !== "string") return "Caminho da imagem inválido.";
+  if (typeof campos.imagem_url === "string" && campos.imagem_url !== "" && !/^((https?:\/\/)|\/uploads\/[a-zA-Z0-9][a-zA-Z0-9._-]*$)/.test(campos.imagem_url)) return "Informe uma foto enviada ao servidor ou uma URL HTTP válida.";
   if (typeof campos.imagem_url === "string" && campos.imagem_url.length > LIMITE.imagemUrl) {
     return "O caminho da imagem é longo demais.";
   }
@@ -110,9 +113,14 @@ function respostaFk(err: unknown, res: Response): boolean {
 // GET /api/produtos -> vitrine do cliente (só produtos ativos)
 export async function listarPublico(req: Request, res: Response) {
   const [rows] = await pool.query(
-    `SELECT p.id, p.nome, p.descricao, p.preco, p.imagem_url, c.nome AS categoria
+    `SELECT p.id, p.nome, p.descricao, p.preco, p.imagem_url, c.nome AS categoria,
+       COALESCE(capacidade.quantidade_disponivel, 0) AS quantidade_disponivel
      FROM produtos p
      LEFT JOIN categorias c ON c.id = p.categoria_id
+     LEFT JOIN (SELECT pi.produto_id,
+       GREATEST(0, FLOOR(MIN(i.quantidade_atual / NULLIF(pi.quantidade_necessaria, 0)))) AS quantidade_disponivel
+       FROM produto_insumo pi JOIN insumos i ON i.id = pi.insumo_id GROUP BY pi.produto_id
+     ) capacidade ON capacidade.produto_id = p.id
      WHERE p.ativo = TRUE
      ORDER BY c.nome, p.nome`
   );
@@ -182,8 +190,15 @@ export async function criar(req: RequisicaoAutenticada, res: Response) {
   if (erroDosCampos) {
     return res.status(400).json({ erro: erroDosCampos });
   }
-  if (ficha_tecnica !== undefined && !fichaValida(ficha_tecnica)) {
-    return res.status(400).json({ erro: "Ficha técnica inválida: cada item precisa de insumo_id e quantidade_necessaria maiores que zero." });
+  // Ficha técnica OBRIGATÓRIA (decisão de negócio): sem receita o produto
+  // não tem controle de estoque — a baixa automática não acontece e ele
+  // seria vendido infinitamente mesmo sem insumo na bancada. Cadastra
+  // primeiro, completa a receita depois? Não: produto sem ficha não deve
+  // nem existir no catálogo.
+  if (!fichaValida(ficha_tecnica) || ficha_tecnica.length === 0) {
+    return res.status(400).json({
+      erro: "Cadastre a ficha técnica (insumos e quantidades) junto com o produto: sem ela o sistema não consegue controlar o estoque e o produto apareceria como disponível para sempre.",
+    });
   }
 
   const conexao = await pool.getConnection();
@@ -197,13 +212,11 @@ export async function criar(req: RequisicaoAutenticada, res: Response) {
     );
     const produtoId = result.insertId;
 
-    if (Array.isArray(ficha_tecnica) && ficha_tecnica.length > 0) {
-      const valores = ficha_tecnica.map((item) => [produtoId, item.insumo_id, item.quantidade_necessaria]);
-      await conexao.query(
-        "INSERT INTO produto_insumo (produto_id, insumo_id, quantidade_necessaria) VALUES ?",
-        [valores]
-      );
-    }
+    const valores = ficha_tecnica.map((item) => [produtoId, item.insumo_id, item.quantidade_necessaria]);
+    await conexao.query(
+      "INSERT INTO produto_insumo (produto_id, insumo_id, quantidade_necessaria) VALUES ?",
+      [valores]
+    );
 
     await conexao.commit();
     // Auditoria depois do commit: se falhasse antes, o produto existiria sem
@@ -223,49 +236,52 @@ export async function criar(req: RequisicaoAutenticada, res: Response) {
 // PUT /api/produtos/:id - atualização parcial dos dados básicos
 export async function atualizar(req: RequisicaoAutenticada, res: Response) {
   const id = Number(req.params.id);
-  const { nome, descricao, preco, categoria_id, imagem_url, ativo } = req.body;
-
-  // O PUT é parcial (COALESCE), então só se valida o que veio preenchido.
-  // Sem isto dava para renomear um produto para "" ou para preço -5 pela API,
-  // e o preço negativo aparecia na vitrine.
+  const { nome, descricao, preco, categoria_id, imagem_url, ativo, ficha_tecnica } = req.body;
   const erroDosCampos = erroNosCampos({ nome, preco, descricao, imagem_url });
-  if (erroDosCampos) {
-    return res.status(400).json({ erro: erroDosCampos });
-  }
-  if (ativo !== undefined && typeof ativo !== "boolean" && ativo !== 0 && ativo !== 1) {
-    return res.status(400).json({ erro: "Valor de 'ativo' inválido." });
-  }
-
-  // Lido antes do UPDATE para o log poder dizer o que era e o que virou.
+  if (erroDosCampos) return res.status(400).json({ erro: erroDosCampos });
+  if (ativo !== undefined && typeof ativo !== 'boolean' && ativo !== 0 && ativo !== 1) return res.status(400).json({ erro: "Valor de 'ativo' inválido." });
+  if (categoria_id !== undefined && categoria_id !== null && (!Number.isInteger(categoria_id) || categoria_id <= 0)) return res.status(400).json({ erro: 'Categoria inválida.' });
+  if (ficha_tecnica !== undefined && (!fichaValida(ficha_tecnica) || ficha_tecnica.length === 0)) return res.status(400).json({ erro: 'A ficha técnica precisa de pelo menos um insumo com quantidade positiva.' });
   const antes = await prepararAtualizacao(id);
-
-  const [result] = await pool.query<ResultSetHeader>(
-    `UPDATE produtos SET
-       nome = COALESCE(?, nome),
-       descricao = COALESCE(?, descricao),
-       preco = COALESCE(?, preco),
-       categoria_id = COALESCE(?, categoria_id),
-       imagem_url = COALESCE(?, imagem_url),
-       ativo = COALESCE(?, ativo)
-     WHERE id = ?`,
-    [nome ?? null, descricao ?? null, preco ?? null, categoria_id ?? null, imagem_url ?? null, ativo ?? null, id]
-  );
-
-  if (result.affectedRows === 0) {
-    return res.status(404).json({ erro: "Produto não encontrado." });
-  }
+  const conexao = await pool.getConnection();
+  try {
+    await conexao.beginTransaction();
+    const [existentes] = await conexao.query<LinhaId[]>('SELECT id FROM produtos WHERE id = ? FOR UPDATE', [id]);
+    if (!existentes.length) { await conexao.rollback(); return res.status(404).json({ erro: 'Produto não encontrado.' }); }
+    // Campo omitido mantém o valor; null explícito remove foto/categoria/descrição.
+    await conexao.query(`UPDATE produtos SET
+      nome = COALESCE(?, nome), preco = COALESCE(?, preco),
+      descricao = IF(?, ?, descricao), categoria_id = IF(?, ?, categoria_id),
+      imagem_url = IF(?, ?, imagem_url), ativo = COALESCE(?, ativo) WHERE id = ?`,
+      [nome ?? null, preco ?? null, descricao !== undefined, descricao || null,
+        categoria_id !== undefined, categoria_id ?? null, imagem_url !== undefined, imagem_url || null, ativo ?? null, id]);
+    if (ficha_tecnica !== undefined) {
+      await conexao.query('DELETE FROM produto_insumo WHERE produto_id = ?', [id]);
+      await conexao.query('INSERT INTO produto_insumo (produto_id, insumo_id, quantidade_necessaria) VALUES ?', [ficha_tecnica.map((item: ItemFicha) => [id, item.insumo_id, item.quantidade_necessaria])]);
+    }
+    await conexao.commit();
+  } catch (erro) {
+    await conexao.rollback();
+    if (respostaFk(erro, res) || respostaDuplicado(erro, res)) return;
+    throw erro;
+  } finally { conexao.release(); }
   await auditarAtualizacao(req, id, antes);
-  res.json({ mensagem: "Produto atualizado com sucesso." });
+  res.json({ mensagem: 'Produto atualizado com sucesso.' });
 }
 
 // PUT /api/produtos/:id/ficha-tecnica - substitui a receita inteira.
 // Primeiro confirma que o produto existe (antes respondia 200 em id fantasma).
+// Receita vazia é recusada: apagar TODOS os insumos de um produto já à venda
+// deixaria ele sem controle de estoque (disponível para sempre). Para tirar um
+// produto do ar, use o ativo/inativo — a ficha registra o que ele usa.
 export async function atualizarFichaTecnica(req: Request, res: Response) {
   const id = Number(req.params.id);
   const { ficha_tecnica } = req.body;
 
-  if (ficha_tecnica !== undefined && !fichaValida(ficha_tecnica)) {
-    return res.status(400).json({ erro: "Ficha técnica inválida: cada item precisa de insumo_id e quantidade_necessaria maiores que zero." });
+  if (!fichaValida(ficha_tecnica) || ficha_tecnica.length === 0) {
+    return res.status(400).json({
+      erro: "A ficha técnica não pode ficar vazia: cada produto precisa de pelo menos um insumo para o sistema controlar o estoque. Para tirar o produto do catálogo, use a opção 'ativo'.",
+    });
   }
 
   const conexao = await pool.getConnection();
@@ -280,13 +296,11 @@ export async function atualizarFichaTecnica(req: Request, res: Response) {
 
     await conexao.query("DELETE FROM produto_insumo WHERE produto_id = ?", [id]);
 
-    if (Array.isArray(ficha_tecnica) && ficha_tecnica.length > 0) {
-      const valores = ficha_tecnica.map((item) => [id, item.insumo_id, item.quantidade_necessaria]);
-      await conexao.query(
-        "INSERT INTO produto_insumo (produto_id, insumo_id, quantidade_necessaria) VALUES ?",
-        [valores]
-      );
-    }
+    const valores = ficha_tecnica.map((item) => [id, item.insumo_id, item.quantidade_necessaria]);
+    await conexao.query(
+      "INSERT INTO produto_insumo (produto_id, insumo_id, quantidade_necessaria) VALUES ?",
+      [valores]
+    );
 
     await conexao.commit();
     res.json({ mensagem: "Ficha técnica atualizada." });

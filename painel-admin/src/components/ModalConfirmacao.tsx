@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Botao } from "./ui/Botao";
 
 // Confirmação com a cara do painel (substitui confirm()/alert() nativos):
@@ -21,13 +22,28 @@ export function ModalConfirmacao({
   aoFechar,
   aoConfirmar,
 }: PropriedadesModalConfirmacao): JSX.Element {
+  const dialogo = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const anterior = document.activeElement as HTMLElement | null;
+    dialogo.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    return () => anterior?.focus();
+  }, []);
   return (
     <div
       className="fixed inset-0 z-[70] grid place-items-center bg-tinta/50 p-4"
       role="alertdialog"
       aria-modal="true"
       aria-label={titulo}
-      onClick={aoFechar}
+      ref={dialogo}
+      onKeyDown={evento => {
+        if (evento.key !== 'Tab') return;
+        const botoes = dialogo.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+        if (!botoes?.length) return;
+        const primeiro = botoes[0], ultimo = botoes[botoes.length - 1];
+        if (evento.shiftKey && document.activeElement === primeiro) { evento.preventDefault(); ultimo.focus(); }
+        else if (!evento.shiftKey && document.activeElement === ultimo) { evento.preventDefault(); primeiro.focus(); }
+      }}
+      onClick={() => { if (!processando) aoFechar(); }}
     >
       <div
         className="w-full max-w-sm rounded-card bg-white p-6 text-tinta shadow-flutuante"

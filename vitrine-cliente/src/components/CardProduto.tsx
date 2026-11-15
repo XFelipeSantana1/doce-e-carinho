@@ -1,161 +1,25 @@
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useState, useCallback } from "react";
+import { createPortal } from "react-dom";
+import { X, Plus, Minus } from "lucide-react";
 import type { Produto } from "../types";
 import { estaDisponivel } from "../lib/disponibilidade";
 import { imagemParaProduto } from "../lib/aparenciaProduto";
 import { formatarMoeda } from "../lib/formatarMoeda";
-import { Estado } from "./ui/Estado";
-
-// Um doce no cardápio, nos DOIS formatos do padrão de cardápio digital:
-//
-//   CELULAR (base)  = linha escaneável — nome → descrição (2 linhas) → preço
-//                     → ação, na coluna da ESQUERDA; miniatura quadrada de
-//                     24 na direita. Hairline do pai (`divide-y`) separa os
-//                     itens; sem moldura de card — é cardápio impresso, não
-//                     vitrine de caixinhas.
-//   sm+             = cartão da grade (mesma hierarquia, foto em cima 4:3,
-//                     borda hairline + `rounded-card` devolvidos).
-//
-// O DOM é UM: o texto vem antes da foto (leitor de tela lê o que o doce É
-// antes do que ele parece) nos dois formatos; quem troca a ordem visual é
-// CSS (`order`). A foto não carrega selo nenhum: categoria e preço já dizem
-// o que é.
-interface PropriedadesCardProduto {
-  produto: Produto;
-  /** Card "capa" da categoria: nasce esticado na grade (row-span 2). */
-  grande?: boolean;
-  quantidadeNaSacola: number;
-  aoAdicionar: (produtoId: number) => void;
-  aoAlterarQuantidade: (produtoId: number, diferenca: number) => void;
-  /** Lixeira: tira o produto TODO da sacola em um toque. */
-  aoRemover: (produtoId: number) => void;
+import { useDialogo } from "../hooks/useDialogo";
+interface Props {
+    produto: Produto;
+    quantidadeNaSacola: number;
+    aoAdicionar: (id: number) => void;
+    aoAlterarQuantidade: (id: number, n: number) => void;
+    aoRemover: (id: number) => void;
 }
-
-export function CardProduto({
-  produto,
-  grande = false,
-  quantidadeNaSacola,
-  aoAdicionar,
-  aoAlterarQuantidade,
-  aoRemover,
-}: PropriedadesCardProduto): JSX.Element {
-  const disponivel = estaDisponivel(produto);
-  const imagem = imagemParaProduto(produto);
-
-  // Se a foto falhar (CDN fora, URL quebrada), o card NÃO inventa doce
-  // (nada de emoji/gradiente): o lugar da foto vira fundo areia com o nome.
-  // Reseta ao trocar de produto.
-  const [falhouImagem, definirFalhouImagem] = useState(false);
-  useEffect(() => {
-    definirFalhouImagem(false);
-  }, [produto.id, imagem]);
-
-  return (
-    // `group` liga o zoom leve da foto (efeito ÚNICO de cardápio, e que já
-    // estava escrito na img — sem a classe ele nunca disparava). O row-span
-    // do card "capa" fica no wrapper (o filho do grid) em GrupoCategoria —
-    // aqui só o esticamento (h-full) e a foto flex-1 respondem ao `grande`.
-    <article
-      className={`group flex items-center gap-3 py-4 sm:h-full sm:flex-col sm:items-stretch sm:gap-0 sm:overflow-hidden sm:rounded-card sm:border sm:border-borda sm:bg-white sm:py-0`}
-    >
-      {/* MINIATURA/FOTO — à DIREITA no celular, no topo a partir de sm. Em
-          impressão some: quem imprime quer a lista de nome e preço. */}
-      <div
-        className={`relative order-2 h-24 w-24 flex-none overflow-hidden rounded-card border border-borda sm:order-1 sm:h-auto sm:w-full sm:rounded-none sm:border-0 ${
-          grande
-            ? "sm:aspect-[4/5] lg:aspect-auto lg:min-h-0 lg:flex-1"
-            : "sm:aspect-[4/3]"
-        } ${disponivel ? "" : "opacity-75 grayscale print:hidden"}`}
-      >
-        {imagem && !falhouImagem ? (
-          <img
-            src={imagem}
-            alt={produto.nome}
-            loading="lazy"
-            decoding="async"
-            onError={() => definirFalhouImagem(true)}
-            className="h-full w-full object-cover transition-transform duration-500 motion-safe:group-hover:scale-[1.03]"
-          />
-        ) : (
-          // Sem foto = areia com o nome em Playfair: honesto (não mostra
-          // outro doce no lugar) e ainda parece desenhado, não quebrado.
-          <div className="grid h-full place-items-center bg-areia px-2 text-center sm:px-4">
-            <span className="line-clamp-3 font-display text-base leading-tight text-textoSuave sm:text-lg">
-              {produto.nome}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* COLUNA DE TEXTO — a escada fixa do cardápio: nome, descrição
-          curta, preço. Nada compete com o preço (3.1 da direção). */}
-      <div className="flex min-w-0 flex-1 flex-col order-1 sm:order-2 sm:p-4">
-        <h3 className="font-display text-lg font-semibold leading-snug tracking-tight text-tinta sm:text-balance">
-          {produto.nome}
-        </h3>
-        {/* UMA ideia de descrição por formato: 2 linhas apertadas na lista do
-            celular, 1 linha no cartão — descrição longa empurra o preço para
-            fora da primeira passada de olho. */}
-        <p className="mt-0.5 line-clamp-2 font-corpo text-sm text-textoSuave sm:line-clamp-1">
-          {produto.descricao}
-        </p>
-
-        <div className="mt-2 sm:mt-auto sm:pt-2">
-          <div className="flex items-center justify-between gap-2">
-            {/* Preço em Manrope tabular semibold: o peso vem do tamanho e do
-                caramelo, não de 800. Na impressão o preço vira tinta. */}
-            <b className="font-numero text-lg font-semibold tabular-nums text-carameloForte print:text-tinta">
-              {formatarMoeda(produto.preco)}
-            </b>
-            {quantidadeNaSacola > 0 ? (
-              <button
-                onClick={() => aoRemover(produto.id)}
-                aria-label={`Remover ${produto.nome} do pedido`}
-                title="Remover do pedido"
-                className="grid h-11 w-11 flex-none place-items-center rounded-campo text-textoSuave transition-colors hover:bg-areia/60 hover:text-carameloForte active:translate-y-px print:hidden"
-              >
-                <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
-              </button>
-            ) : (
-              !disponivel && <Estado />
-            )}
-          </div>
-          {disponivel &&
-            (quantidadeNaSacola === 0 ? (
-              // A ação de compra: borda de corte + prensa de 1px, como todos
-              // os botões de comprar da casa. Em impressão, fora.
-              <button
-                onClick={() => aoAdicionar(produto.id)}
-                aria-label={`Adicionar ${produto.nome} à sacola`}
-                className="mt-2 flex min-h-11 w-full items-center justify-center gap-1.5 rounded-campo border-b-2 border-carameloEscuro bg-tinta font-corpo text-sm font-semibold text-creme transition-colors hover:bg-carameloEscuro active:translate-y-px print:hidden"
-              >
-                <Plus size={16} strokeWidth={1.5} aria-hidden="true" /> Adicionar
-              </button>
-            ) : (
-              // Seletor − 1 +: controles internos em `rounded-lg` (encaixe do
-              // contêiner p-1: 12−4=8). Alvos de 44px, prensa de 1px.
-              <div className="mt-2 flex items-center justify-between rounded-campo border border-borda bg-white p-1 print:hidden">
-                <button
-                  onClick={() => aoAlterarQuantidade(produto.id, -1)}
-                  aria-label={`Tirar um ${produto.nome} da sacola`}
-                  className="grid h-11 w-11 place-items-center rounded-lg font-corpo text-lg font-semibold text-tinta transition-colors hover:bg-tinta hover:text-creme active:translate-y-px"
-                >
-                  −
-                </button>
-                <b className="min-w-6 text-center font-numero text-sm font-semibold tabular-nums text-tinta">
-                  {quantidadeNaSacola}
-                </b>
-                <button
-                  onClick={() => aoAlterarQuantidade(produto.id, 1)}
-                  aria-label={`Colocar mais um ${produto.nome} na sacola`}
-                  className="grid h-11 w-11 place-items-center rounded-lg font-corpo text-lg font-semibold text-tinta transition-colors hover:bg-tinta hover:text-creme active:translate-y-px"
-                >
-                  +
-                </button>
-              </div>
-            ))}
-        </div>
-      </div>
-    </article>
-  );
+export function CardProduto({ produto, quantidadeNaSacola, aoAdicionar, aoAlterarQuantidade }: Props): JSX.Element {
+    const [aberto, setAberto] = useState(false), [quantidade, setQuantidade] = useState(1), [falha, setFalha] = useState(false);
+    const fechar = useCallback(() => setAberto(false), []);
+    const ref = useDialogo(aberto, fechar);
+    const disponivel = estaDisponivel(produto), imagem = imagemParaProduto(produto);
+    const limite = produto.quantidadeDisponivel === undefined ? 99 : Math.max(0, produto.quantidadeDisponivel - quantidadeNaSacola);
+    const foto = <>{imagem && !falha ? <img src={imagem} alt={produto.nome} loading="lazy" onError={() => setFalha(true)}/> : <span className="font-display text-textoSuave">{produto.nome}</span>}</>;
+    function abrir() { setQuantidade(1); setAberto(true); }
+    return <><article className="loja-produto"><button className="loja-produto-foto" onClick={abrir} aria-label={"Ver detalhes de " + produto.nome}>{foto}{!disponivel && <span className="loja-etiqueta">Indisponível</span>}</button><div className="loja-produto-corpo"><button onClick={abrir} className="text-left"><h3 className="font-display text-xl font-semibold">{produto.nome}</h3></button><p className="loja-descricao">{produto.descricao}</p><button onClick={abrir} className="loja-detalhes">Ver detalhes →</button><div className="loja-produto-preco"><b className="font-numero text-lg text-carameloForte">{formatarMoeda(produto.preco)}</b><span className="text-xs text-textoSuave">{quantidadeNaSacola > 0 ? quantidadeNaSacola + " na sacola" : "por unidade"}</span></div><button className="loja-acao w-full" disabled={!disponivel || limite <= 0} onClick={() => aoAdicionar(produto.id)} aria-label={"Adicionar " + produto.nome + " à sacola"}><Plus size={17}/>{!disponivel ? "Indisponível" : limite <= 0 ? "Limite na sacola" : "Adicionar"}</button></div></article>{aberto && createPortal(<div className="loja-modal-fundo" onClick={fechar}><div ref={ref} tabIndex={-1} role="dialog" aria-modal="true" aria-label={produto.nome} className="loja-modal-produto" onClick={e => e.stopPropagation()}><button className="loja-fechar" onClick={fechar} aria-label="Fechar detalhes"><X size={20}/></button><div className="loja-modal-foto">{foto}</div><div className="p-5 sm:p-7"><p className="text-xs font-semibold text-carameloForte">{produto.categoria ?? "Da nossa confeitaria"}</p><h2 className="mt-2 font-display text-3xl font-bold">{produto.nome}</h2><p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-textoSuave">{produto.descricao}</p><p className="mt-4 font-numero text-xl font-semibold">{formatarMoeda(produto.preco)} <span className="text-xs font-normal text-textoSuave">por unidade</span></p><div className="mt-6 flex flex-wrap items-center gap-3"><div className="loja-quantidade"><button aria-label="Diminuir quantidade" disabled={quantidade <= 1} onClick={() => setQuantidade(n => n - 1)}><Minus size={17}/></button><output aria-label="Quantidade">{quantidade}</output><button aria-label="Aumentar quantidade" disabled={quantidade >= limite} onClick={() => setQuantidade(n => n + 1)}><Plus size={17}/></button></div><button className="loja-acao flex-1" disabled={!disponivel || limite <= 0} onClick={() => { aoAlterarQuantidade(produto.id, Math.min(quantidade, limite)); fechar(); }}>{!disponivel ? "Indisponível" : limite <= 0 ? "Limite na sacola" : "Adicionar · " + formatarMoeda(produto.preco * Math.min(quantidade, limite))}</button></div></div></div></div>, document.body)}</>;
 }

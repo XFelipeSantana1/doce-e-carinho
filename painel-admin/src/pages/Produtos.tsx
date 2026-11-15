@@ -10,6 +10,7 @@ import { EsqueletoTabela } from "../components/ui/EsqueletoTabela";
 import { Botao } from "../components/ui/Botao";
 import { AlertaAcao } from "../components/AlertaAcao";
 import { BuscaComContagem } from "../components/BuscaComContagem";
+import { PainelSecao, Indicadores } from "../components/PainelSecao";
 import { CabecalhoSecao } from "../components/CabecalhoSecao";
 import { TabelaProdutos } from "../components/TabelaProdutos";
 import { type FiltroCategoria } from "../components/PainelCategorias";
@@ -80,7 +81,7 @@ export function Produtos(): JSX.Element {
         : produtos.filter((produto) => produto.categoria_id === filtro);
 
   const visiveis = useMemo(() => {
-    const alvo = termo.trim().toLowerCase();
+    const alvo = termo.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     if (alvo === "") return porCategoria;
     const semAcento = (texto: string) =>
       texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -127,7 +128,7 @@ export function Produtos(): JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
+    <div className="admin-page">
       <CabecalhoSecao
         titulo="Produtos"
         acao={
@@ -146,22 +147,27 @@ export function Produtos(): JSX.Element {
         }
       />
 
+      <Indicadores itens={[{rotulo:'Produtos cadastrados',valor:produtos.length,descricao:'Catálogo completo'},{rotulo:'Na vitrine',valor:produtos.filter(p=>p.ativo).length,descricao:'Produtos visíveis ao cliente'},{rotulo:'Ocultos',valor:produtos.filter(p=>!p.ativo).length,descricao:'Fora do cardápio público'}]}/>
+      <PainelSecao titulo="Catálogo de produtos" descricao="Encontre, edite e organize os produtos da confeitaria.">
+      <div className="admin-toolbar">
       <BuscaComContagem
         valor={termo}
         aoMudar={definirTermo}
-        placeholder="Buscar doce pelo nome…"
+        placeholder="Buscar produto…"
         rotulo="Buscar produto pelo nome"
         encontrados={visiveis.length}
         total={porCategoria.length}
         palavra="produtos"
       />
+      <label className="admin-select-label">Categoria<select className="admin-select" value={String(filtro)} onChange={e=>filtrar(e.target.value==='todas'?'todas':e.target.value==='sem'?'sem':Number(e.target.value))}><option value="todas">Todas as categorias</option><option value="sem">Sem categoria</option>{categorias.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label>
+      </div>
 
       {/* Dois erros podem coexistir (a troca de visibilidade e a janela), e
           quem está em cima é o mais recente. */}
       <AlertaAcao texto={erroAlternar ?? janela.aviso} />
 
       {filtro !== "todas" ? (
-        <div className="flex items-center justify-between gap-2">
+        <div className="admin-active-filter flex items-center justify-between gap-2">
           {/* Filtro ativo em TEXTO (sem pílula): o nome e a quantidade da
               seleção; sair do filtro é ação de texto com o X de "fechar". */}
           <span className="min-w-0 truncate text-sm font-medium text-tinta">
@@ -210,6 +216,7 @@ export function Produtos(): JSX.Element {
         />
       )}
 
+      </PainelSecao>
       <PainelDeProduto
         janela={janela.janela}
         categorias={categorias}

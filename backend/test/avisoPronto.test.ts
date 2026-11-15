@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { executarAvisoPronto, FalhaAviso, type DependenciasAviso, type EstadoAviso } from '../src/services/avisoPronto.js';
+import { executarAvisoPronto, FalhaAviso, mensagemStatus, type DependenciasAviso, type EstadoAviso } from '../src/services/avisoPronto.js';
 function preparar(enviar: DependenciasAviso['enviar']) {
   let estado: EstadoAviso = 'pendente';
   const deps: DependenciasAviso = {
@@ -38,4 +38,21 @@ test('pedidos antigos sem aviso pendente não geram mensagens retroativas', asyn
   const { deps } = preparar(async () => { envios++; });
   deps.obter = async () => ({ whatsapp: '5515000000000', aviso_pronto_estado: null });
   assert.equal((await executarAvisoPronto(42, deps)).estado, null); assert.equal(envios, 0);
+});
+
+test('mensagem de retirada em "pronto" inclui o código de confirmação', async () => {
+  const mensagem = mensagemStatus(42, 'pronto', 'retirada', '4831');
+  assert.match(mensagem, /pronto para retirada/);
+  assert.match(mensagem, /4831/);
+});
+
+test('mensagem de entrega em "saiu_para_entrega" inclui o código do motoboy', async () => {
+  const mensagem = mensagemStatus(42, 'saiu_para_entrega', 'entrega', '7720');
+  assert.match(mensagem, /saiu para entrega/);
+  assert.match(mensagem, /7720/);
+});
+
+test('status sem código não imprimem o campo (ele não significa nada ali)', async () => {
+  assert.doesNotMatch(mensagemStatus(42, 'em_preparo', 'retirada', '4831'), /4831/);
+  assert.doesNotMatch(mensagemStatus(42, 'pronto', 'entrega'), /\d{4}\n/);
 });

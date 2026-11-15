@@ -18,6 +18,7 @@ export interface Sessao {
 
 /** Pedido como o GET /api/pedidos entrega (com dados do cliente juntos). */
 export interface Pedido {
+  cancelamento_solicitado_em?: string | null;
   aviso_pronto_estado?: string | null;
   aviso_status_estado?: string | null;
   aviso_pagamento_estado?: string | null;
@@ -28,6 +29,8 @@ export interface Pedido {
   taxa_entrega?: number;
   entrega_distancia_metros?: number | null;
   entrega_simulada?: boolean;
+  /** Código de confirmação que o cliente recebe no WhatsApp (pronto/saiu). */
+  codigo_entrega?: string | null;
   id: number;
   cliente_id: number;
   cliente_nome: string | null;

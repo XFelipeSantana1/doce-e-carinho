@@ -15,7 +15,7 @@ export function AbasRodape({ pendentes }: { pendentes: number | null }): JSX.Ele
   return (
     <nav
       aria-label="Navegação do painel"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-borda bg-creme pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-borda bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       <div className="grid grid-cols-5">
         {ITENS_MENU.map((item) => {
@@ -29,7 +29,7 @@ export function AbasRodape({ pendentes }: { pendentes: number | null }): JSX.Ele
               aria-current={ativo ? "page" : undefined}
               className={({ isActive }) =>
                 `relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 py-2 text-xs transition-colors ${
-                  isActive ? "font-semibold text-tinta" : "text-textoSuave"
+                  isActive ? "font-semibold text-carameloForte bg-areia/50" : "text-textoSuave"
                 } md:text-xs`
               }
             >

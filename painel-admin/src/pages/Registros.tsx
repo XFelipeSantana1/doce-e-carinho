@@ -5,6 +5,7 @@ import type { Registro } from "../types";
 import { Botao } from "../components/ui/Botao";
 import { EsqueletoTabela } from "../components/ui/EsqueletoTabela";
 import { CabecalhoSecao } from "../components/CabecalhoSecao";
+import { PainelSecao } from "../components/PainelSecao";
 import { LinhaRegistro } from "../components/LinhaRegistro";
 
 // Histórico de alterações (/painel/registros), 5.5. Existe para responder
@@ -85,7 +86,7 @@ export function Registros(): JSX.Element {
   const grupos = agruparPorDia(registros);
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
+    <div className="admin-page">
       <CabecalhoSecao
         titulo="Histórico"
         acao={
@@ -95,11 +96,8 @@ export function Registros(): JSX.Element {
         }
       />
 
-      <p className="max-w-2xl text-sm text-textoSuave">
-        Tudo que o painel grava fica registrado aqui: em ordem de cronologia —
-        dia, hora, quem fez e o que era antes. Serve para conferir preço,
-        estoque e visibilidade dos doces sem precisar lembrar de cabeça.
-      </p>
+      <PainelSecao titulo="Atividades registradas" descricao="Expanda uma alteração para ver os valores anteriores e atuais.">
+      <div className="admin-panel-body">
 
       {carregando && registros.length === 0 ? (
         <EsqueletoTabela linhas={5} />
@@ -157,6 +155,8 @@ export function Registros(): JSX.Element {
           </div>
         </div>
       )}
+      </div>
+      </PainelSecao>
     </div>
   );
 }

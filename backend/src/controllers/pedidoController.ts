@@ -1,7 +1,8 @@
 import pool from "../config/db.js";
+import { randomInt } from "node:crypto";
 import { Request, Response } from "express";
 import type { ResultSetHeader, RowDataPacket } from "mysql2";
-import { ehFinal, podeMudar, rotulo, STATUS_VALIDOS } from "../lib/cicloPedido.js";
+import { ehFinal, motivoBloqueioPagamento, pagamentoPermitido, podeMudar, rotulo, STATUS_VALIDOS } from "../lib/cicloPedido.js";
 import { registrar } from "../services/registroService.js";
 import type { RequisicaoAutenticada } from "../middleware/auth.js";
 import { notificarStatusPedido } from '../services/avisoPronto.js';
@@ -28,6 +29,12 @@ interface LinhaEstoque extends RowDataPacket {
 interface LinhaStatus extends RowDataPacket {
   status: string;
   status_pagamento: string;
+  forma_pagamento: string | null;
+  tipo_recebimento: string;
+  codigo_entrega: string | null;
+  cancelamento_solicitado_em: Date | null;
+  codigo_tentativas: number;
+  codigo_bloqueado_ate: Date | null;
 }
 
 /** Soma por insumo no estorno: volta string (SUM de DECIMAL), Number() no uso. */
@@ -67,7 +74,7 @@ export async function listar(req: Request, res: Response) {
   sql += " ORDER BY pe.criado_em DESC";
 
   const [rows] = await pool.query(sql, params);
-  res.json(rows);
+  res.json((rows as RowDataPacket[]).map(({ codigo_entrega: _codigo, codigo_tentativas: _tentativas, codigo_bloqueado_ate: _bloqueio, ...pedido }) => pedido));
 }
 
 export async function buscarPorId(req: Request, res: Response) {
@@ -90,7 +97,8 @@ export async function buscarPorId(req: Request, res: Response) {
     [id]
   );
 
-  res.json({ ...pedidoRows[0], itens });
+  const { codigo_entrega: _codigo, codigo_tentativas: _tentativas, codigo_bloqueado_ate: _bloqueio, ...pedido } = pedidoRows[0];
+  res.json({ ...pedido, itens });
 }
 
 // POST /api/bot/pedidos - chamado pelo bot (menu fixo, Nível 2)
@@ -117,6 +125,11 @@ export async function criarViaBot(req: Request, res: Response) {
   }
   const tipoRecebimento = req.body.tipo_recebimento ?? 'retirada';
   if (!['retirada', 'entrega'].includes(tipoRecebimento)) return res.status(400).json({ erro: 'Escolha retirada ou entrega.' });
+  if (!pagamentoPermitido(tipoRecebimento, forma_pagamento)) {
+    return res.status(400).json({ erro: tipoRecebimento === 'entrega'
+      ? 'Entrega em domicílio aceita somente Pix, confirmado antes do preparo.'
+      : 'Escolha Pix, cartão ou dinheiro para retirada.' });
+  }
   let entrega: CotacaoEntrega | null = null;
   if (tipoRecebimento === 'entrega') {
     try { entrega = validarCotacao(req.body.cotacao_entrega, whatsapp); }
@@ -269,6 +282,16 @@ export async function criarViaBot(req: Request, res: Response) {
 // Regras: cancelado é estado final (não sai de lá) e cancelar ESTORNA o
 // estoque debitado na venda (baixa reversa auditada). Sem isso, cancelar
 // sumia com o pedido e o insumo ficava debitado para sempre.
+//
+// Pix não confirmado trava em_preparo/pronto/saiu_para_entrega (lib/cicloPedido).
+// Ao entrar em "pronto" o pedido ganha um código de 4 dígitos: é o que o
+// cliente apresenta na retirada (ou repassa ao motoboy) e o gestor digita
+// no painel para concluir — sem código, não há baixa (ver confirmarEntrega).
+// Concluir por este endpoint está BLOQUEADO: só o código entrega.
+
+/** O código é validado junto do ID do pedido; não precisa ser globalmente único. */
+function gerarCodigoEntrega(): string { return String(randomInt(1000, 10000)); }
+
 export async function atualizarStatus(req: RequisicaoAutenticada, res: Response) {
   const id = Number(req.params.id);
   const { status } = req.body;
@@ -282,7 +305,7 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
     await conexao.beginTransaction();
 
     const [pedidoRows] = await conexao.query<LinhaStatus[]>(
-      "SELECT status, status_pagamento, tipo_recebimento FROM pedidos WHERE id = ? FOR UPDATE",
+      "SELECT status, status_pagamento, forma_pagamento, tipo_recebimento, codigo_entrega, cancelamento_solicitado_em, codigo_tentativas, codigo_bloqueado_ate FROM pedidos WHERE id = ? FOR UPDATE",
       [id]
     );
     if (!pedidoRows[0]) {
@@ -296,6 +319,19 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
       return res.json({ id, status, notificacao_whatsapp: await notificarStatusPedido(id, status) });
     }
 
+    if (req.body.status_atual !== statusAnterior) {
+      await conexao.rollback();
+      return res.status(409).json({ erro: 'O pedido mudou em outra tela. Atualize antes de confirmar a etapa.' });
+    }
+    if (status !== 'cancelado' && pedidoRows[0].cancelamento_solicitado_em) {
+      await conexao.rollback();
+      return res.status(409).json({ erro: 'Há uma solicitação de cancelamento. Resolva com o cliente antes de iniciar o preparo.' });
+    }
+    if (status !== 'cancelado' && pedidoRows[0].tipo_recebimento === 'entrega' && pedidoRows[0].forma_pagamento !== 'pix') {
+      await conexao.rollback();
+      return res.status(409).json({ erro: 'Entrega em domicílio exige pagamento por Pix. Este pedido precisa ser revisto pela gestão.' });
+    }
+
     // A regra mora na API (lib/cicloPedido): a tela esconder o botão não
     // impede a chamada. Sem esta checagem dava para devolver ao estoque uma
     // encomenda já entregue, ou andar para trás no fluxo.
@@ -307,15 +343,43 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
       return res.status(409).json({ erro: motivo });
     }
 
-    // Cancelar devolve o dinheiro recebido: o pedido não vai mais ser entregue.
+    // Concluir exige o CÓDIGO, não um clique: quem tem o pedido em mãos é
+    // quem recebeu o código no WhatsApp. Direto, só cancelar/estornar.
+    if (status === "entregue") {
+      await conexao.rollback();
+      return res.status(409).json({
+        erro: "Para concluir o pedido, informe o código de confirmação que o cliente recebeu (campo Código no pedido).",
+      });
+    }
+
+    // Pix é pré-pago: sem confirmação, a produção não começa.
+    const bloqueio = motivoBloqueioPagamento(status, pedidoRows[0].forma_pagamento, pedidoRows[0].status_pagamento);
+    if (bloqueio) {
+      await conexao.rollback();
+      return res.status(409).json({ erro: bloqueio });
+    }
+
+    // O reembolso financeiro precisa ser realizado e registrado pela gestão.
     const tipo = pedidoRows[0].tipo_recebimento;
     if ((status === 'saiu_para_entrega' && tipo !== 'entrega') || (statusAnterior === 'pronto' && status === 'entregue' && tipo === 'entrega')) {
       await conexao.rollback();
       return res.status(409).json({ erro: 'Use o fluxo de retirada ou entrega correspondente ao pedido.' });
     }
-    const estornarPagamento = status === "cancelado" && pedidoRows[0].status_pagamento === "pago";
 
-    await conexao.query("UPDATE pedidos SET status = ?, aviso_pronto_estado = IF(? = 'pronto', COALESCE(aviso_pronto_estado, 'pendente'), aviso_pronto_estado) WHERE id = ?", [status, status, id]);
+
+    // Entrando em "pronto", o pedido ganha o código de confirmação (se ainda
+    // não tem). Gerar AQUI, dentro da transação e da mesma travada que muda
+    // o status: código sem status pronto não significa nada.
+    let codigoNovo: string | null = null;
+    if (status === "pronto" && !pedidoRows[0].codigo_entrega) {
+      codigoNovo = gerarCodigoEntrega();
+    }
+
+    await conexao.query(
+      "UPDATE pedidos SET status = ?, aviso_pronto_estado = IF(? = 'pronto', COALESCE(aviso_pronto_estado, 'pendente'), aviso_pronto_estado), codigo_entrega = COALESCE(?, codigo_entrega) WHERE id = ?",
+      [status, status, codigoNovo, id]
+    );
+    if (status === 'cancelado') await conexao.query('UPDATE pedidos SET cancelamento_solicitado_em=NULL WHERE id=?', [id]);
     await conexao.query("INSERT INTO avisos_pedido (pedido_id,status,estado) VALUES (?,?,'pendente') ON DUPLICATE KEY UPDATE pedido_id=pedido_id", [id, status]);
 
     // Entrou em cancelado vindo de outro estado: devolve cada insumo usado
@@ -345,12 +409,6 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
       }
     }
 
-    if (estornarPagamento) {
-      await conexao.query(
-        "UPDATE pedidos SET status_pagamento = 'estornado' WHERE id = ?",
-        [id]
-      );
-    }
 
     await conexao.commit();
 
@@ -364,7 +422,7 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
       antes: { status: statusAnterior, status_pagamento: pedidoRows[0].status_pagamento },
       depois: {
         status,
-        status_pagamento: estornarPagamento ? "estornado" : pedidoRows[0].status_pagamento,
+        status_pagamento: pedidoRows[0].status_pagamento,
       },
     });
 
@@ -372,7 +430,7 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
     res.json({
       id,
       status,
-      status_pagamento: estornarPagamento ? "estornado" : pedidoRows[0].status_pagamento,
+      status_pagamento: pedidoRows[0].status_pagamento,
       notificacao_whatsapp: notificacao,
     });
   } catch (err) {
@@ -381,6 +439,106 @@ export async function atualizarStatus(req: RequisicaoAutenticada, res: Response)
   } finally {
     conexao.release();
   }
+}
+
+// PATCH /api/pedidos/:id/entregar -> painel
+// Conclusão do pedido por CÓDIGO de confirmação: quem tem o pedido em mãos é
+// quem recebeu o código no WhatsApp (quando o pedido ficou "pronto"). O gestor
+// digita o que o cliente/motoboy informou; acertou, baixa; errou, nada muda.
+// Por aqui — e não por um clique em /status — é que o pedido termina.
+export async function confirmarEntrega(req: RequisicaoAutenticada, res: Response) {
+  const id = Number(req.params.id);
+  const { codigo } = req.body;
+
+  // Formato antes de tocar no banco: qualquer coisa que não seja 4 dígitos
+  // nunca é código válido, então nem vale a consulta.
+  if (typeof codigo !== "string" || !/^\d{4}$/.test(codigo)) {
+    return res.status(400).json({ erro: "Informe o código de confirmação de 4 dígitos." });
+  }
+
+  const conexao = await pool.getConnection();
+  try {
+    await conexao.beginTransaction();
+
+    const [rows] = await conexao.query<LinhaStatus[]>(
+      "SELECT status, status_pagamento, forma_pagamento, tipo_recebimento, codigo_entrega, cancelamento_solicitado_em, codigo_tentativas, codigo_bloqueado_ate FROM pedidos WHERE id = ? FOR UPDATE",
+      [id]
+    );
+    const pedido = rows[0];
+    if (!pedido) {
+      await conexao.rollback();
+      return res.status(404).json({ erro: "Pedido não encontrado." });
+    }
+
+    if (!podeMudar(pedido.status, "entregue")) {
+      await conexao.rollback();
+      const motivo = ehFinal(pedido.status)
+        ? `Pedido ${rotulo(pedido.status)} é o fim do fluxo e não muda mais.`
+        : `Só é possível concluir um pedido que esteja "pronto" (retirada) ou "saiu para entrega".`;
+      return res.status(409).json({ erro: motivo });
+    }
+
+    // Entrega em "pronto" significa motoboy que ainda não saiu: o cliente
+    // confirmaria recebimento de um pedido que nunca chegou. Passa primeiro
+    // por "saiu_para_entrega" (que manda o código ao cliente).
+    if (pedido.tipo_recebimento === "entrega" && pedido.status === "pronto") {
+      await conexao.rollback();
+      return res.status(409).json({ erro: 'O pedido ainda não saiu para entrega. Avance para "saiu para entrega" primeiro.' });
+    }
+
+    if (!pedido.codigo_entrega) {
+      await conexao.rollback();
+      return res.status(409).json({ erro: "Este pedido não tem código de confirmação. Avance o fluxo até 'pronto' para gerar." });
+    }
+
+    if (pedido.codigo_bloqueado_ate && new Date(pedido.codigo_bloqueado_ate).getTime() > Date.now()) {
+      await conexao.rollback();
+      return res.status(429).json({ erro: 'Muitas tentativas. Aguarde 5 minutos e confira o código com o cliente.' });
+    }
+    if (pedido.codigo_entrega !== codigo) {
+      const tentativas = pedido.codigo_bloqueado_ate ? 1 : Number(pedido.codigo_tentativas || 0) + 1;
+      await conexao.query('UPDATE pedidos SET codigo_tentativas=?, codigo_bloqueado_ate=IF(? >= 5, DATE_ADD(NOW(), INTERVAL 5 MINUTE), NULL) WHERE id=?', [tentativas, tentativas, id]);
+      await conexao.commit();
+      // 409 com mensagem genérica de propósito: não revelar se o pedido
+      // existe/como está para quem digita códigos errado várias vezes.
+      await registrar(req, {
+        acao: "atualizar",
+        tabela: "pedidos",
+        registroId: id,
+        descricao: `Tentativa de conclusão do pedido #${id} com código INCORRETO`,
+      });
+      return res.status(409).json({ erro: "Código de confirmação incorreto. Confira com o cliente." });
+    }
+
+    const bloqueioPagamento = motivoBloqueioPagamento('entregue', pedido.forma_pagamento, pedido.status_pagamento);
+    if (bloqueioPagamento || (pedido.tipo_recebimento === 'entrega' && pedido.forma_pagamento !== 'pix')) {
+      await conexao.rollback();
+      return res.status(409).json({ erro: bloqueioPagamento || 'Entrega em domicílio exige Pix.' });
+    }
+    await conexao.query("UPDATE pedidos SET status = 'entregue', codigo_entrega = NULL, codigo_tentativas = 0, codigo_bloqueado_ate = NULL WHERE id = ?", [id]);
+    await conexao.query(
+      "INSERT INTO avisos_pedido (pedido_id,status,estado) VALUES (?,'entregue','pendente') ON DUPLICATE KEY UPDATE pedido_id=pedido_id",
+      [id]
+    );
+    await conexao.commit();
+  } catch (error) {
+    await conexao.rollback();
+    throw error;
+  } finally {
+    conexao.release();
+  }
+
+  await registrar(req, {
+    acao: "atualizar",
+    tabela: "pedidos",
+    registroId: id,
+    descricao: `Concluiu o pedido #${id} com código de confirmação validado`,
+    antes: { status: "pronto/saiu_para_entrega" },
+    depois: { status: "entregue" },
+  });
+
+  const notificacao = await notificarStatusPedido(id, "entregue");
+  res.json({ id, status: "entregue", notificacao_whatsapp: notificacao });
 }
 
 export async function atualizarPagamento(req: RequisicaoAutenticada, res: Response) {
@@ -401,6 +559,12 @@ export async function atualizarPagamento(req: RequisicaoAutenticada, res: Respon
       'SELECT status, status_pagamento FROM pedidos WHERE id = ? FOR UPDATE', [id]);
     anterior = rows[0];
     if (!anterior) { await conexao.rollback(); return res.status(404).json({ erro: 'Pedido não encontrado.' }); }
+    if (status_pagamento === 'estornado' && (anterior.status !== 'cancelado' || anterior.status_pagamento !== 'pago')) {
+      await conexao.rollback(); return res.status(409).json({ erro: 'Confirme o estorno somente após cancelar um pedido pago e efetuar o reembolso.' });
+    }
+    if (status_pagamento === 'pendente' && anterior.status !== 'pendente') {
+      await conexao.rollback(); return res.status(409).json({ erro: 'Não é possível remover a confirmação de pagamento após iniciar o preparo.' });
+    }
     if (anterior.status === 'cancelado' && status_pagamento !== 'estornado') {
       await conexao.rollback(); return res.status(409).json({ erro: 'Pedido cancelado só aceita pagamento estornado.' });
     }
@@ -421,4 +585,28 @@ export async function atualizarPagamento(req: RequisicaoAutenticada, res: Respon
   });
   const notificacao = status_pagamento === 'pago' ? await notificarStatusPedido(id, 'pagamento_confirmado') : null;
   res.json({ id, status_pagamento, notificacao_whatsapp: notificacao });
+}
+
+export async function solicitarCancelamento(req: Request, res: Response) {
+  const id = Number(req.params.id), whatsapp = req.body.whatsapp;
+  if (!Number.isInteger(id) || id <= 0 || typeof whatsapp !== 'string') return res.status(400).json({ erro: 'Pedido inválido.' });
+  const conexao = await pool.getConnection();
+  try {
+    await conexao.beginTransaction();
+    const [rows] = await conexao.query<RowDataPacket[]>('SELECT p.status FROM pedidos p JOIN clientes c ON c.id=p.cliente_id WHERE p.id=? AND c.whatsapp=? FOR UPDATE', [id, whatsapp]);
+    if (!rows[0]) { await conexao.rollback(); return res.status(404).json({ erro: 'Pedido não encontrado para este cliente.' }); }
+    if (rows[0].status !== 'pendente') { await conexao.rollback(); return res.status(409).json({ erro: 'O pedido já entrou em preparo ou foi finalizado. Fale com a loja para avaliar a situação; não houve cancelamento automático.' }); }
+    await conexao.query('UPDATE pedidos SET cancelamento_solicitado_em=COALESCE(cancelamento_solicitado_em,NOW()) WHERE id=?', [id]);
+    await conexao.commit();
+  } catch (erro) { await conexao.rollback(); throw erro; } finally { conexao.release(); }
+  await registrar(req, { acao:'atualizar', tabela:'pedidos', registroId:id, descricao:'Cliente solicitou cancelamento antes do preparo' });
+  res.json({ id, solicitado:true });
+}
+
+export async function manterPedido(req: RequisicaoAutenticada, res: Response) {
+  const id = Number(req.params.id);
+  const [resultado] = await pool.query<ResultSetHeader>("UPDATE pedidos SET cancelamento_solicitado_em=NULL WHERE id=? AND status='pendente' AND cancelamento_solicitado_em IS NOT NULL", [id]);
+  if (!resultado.affectedRows) return res.status(409).json({ erro:'A solicitação já foi resolvida. Atualize o pedido.' });
+  await registrar(req, { acao:'atualizar', tabela:'pedidos', registroId:id, descricao:'Gestão manteve o pedido após tratar a solicitação de cancelamento com o cliente' });
+  res.json({ id, solicitado:false });
 }

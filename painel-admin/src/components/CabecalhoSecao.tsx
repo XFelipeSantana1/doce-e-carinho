@@ -1,21 +1,5 @@
-import type { ReactNode } from "react";
-
-// Cabeçalho padrão das telas (título de página + ação à direita).
-// O sobretítulo em caixa-alta saiu ("PRODUTOS" acima de "Produtos" dizia
-// duas vezes a mesma coisa): 3.3 remove eyebrows de página, exceto a data
-// do Resumo — que nem passa por aqui.
-interface PropriedadesCabecalhoSecao {
-  titulo: string;
-  acao?: ReactNode;
-}
-
-export function CabecalhoSecao({ titulo, acao }: PropriedadesCabecalhoSecao): JSX.Element {
-  return (
-    <div className="flex flex-wrap items-end justify-between gap-3">
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-tinta md:text-3xl">
-        {titulo}
-      </h1>
-      {acao}
-    </div>
-  );
+import type { ReactNode } from 'react';
+const DESCRICOES:Record<string,string>={Pedidos:'Confira pagamento, produção e recebimento em cada pedido.',Produtos:'Organize o catálogo, os preços e a visibilidade na vitrine.',Insumos:'Acompanhe o estoque e identifique o que precisa de reposição.',Histórico:'Confira quem fez cada alteração e o que mudou.'};
+export function CabecalhoSecao({titulo,acao,descricao}:{titulo:string;acao?:ReactNode;descricao?:string}):JSX.Element {
+ return <header className="admin-page-heading"><div><h1>{titulo}</h1>{(descricao??DESCRICOES[titulo])?<p>{descricao??DESCRICOES[titulo]}</p>:null}</div>{acao?<div className="admin-page-actions">{acao}</div>:null}</header>;
 }

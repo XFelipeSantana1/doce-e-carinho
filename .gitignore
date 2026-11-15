@@ -40,3 +40,8 @@ CONTEXTO_PROJETO.md
 prompt-opencode.md
 PROMPT-IMAGENS.md
 IDENTIDADE.md
+
+# Segredos e dados locais gerados neste ambiente
+credenciais.local.json
+.credenciais-teste.txt
+*.local.json

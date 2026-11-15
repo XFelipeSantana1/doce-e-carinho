@@ -153,7 +153,7 @@ export function CampoImagem({
           </div>
           <p className="text-xs leading-relaxed text-textoSuave">
             {textoAjuda ??
-              "Clique ou arraste a imagem. JPG, PNG ou WebP até 5 MB. No celular, o ajuste de recorte aparece depois de escolher a foto."}
+              "Clique ou arraste a imagem. JPG, PNG ou WebP até 5 MB. O recorte depende da galeria do seu celular."}
           </p>
         </div>
       </div>

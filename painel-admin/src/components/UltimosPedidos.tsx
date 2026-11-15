@@ -13,7 +13,7 @@ export function UltimosPedidos({ pedidos }: { pedidos: Pedido[] }): JSX.Element 
   const recentes = pedidos.slice(0, 5);
   return (
     <section aria-label="Últimos pedidos">
-      <div className="flex items-baseline justify-between gap-3">
+      <div className="hidden">
         <p className="text-xs font-semibold uppercase tracking-wider text-textoSuave">
           Últimos pedidos
         </p>
@@ -31,7 +31,7 @@ export function UltimosPedidos({ pedidos }: { pedidos: Pedido[] }): JSX.Element 
           {recentes.map((pedido) => (
             <li key={pedido.id}>
               <Link
-                to="/painel/pedidos"
+                to={"/painel/pedidos?pedido=" + pedido.id}
                 className="flex min-h-16 min-w-0 flex-col justify-center gap-0.5 py-2 transition-colors hover:bg-areia/50"
               >
                 <span className="flex items-baseline justify-between gap-3">

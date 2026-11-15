@@ -3,6 +3,7 @@ const normalizar = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g,''
 const moeda = value => Number(value).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
 const menu = 'Olá! Bem-vindo à Doce & Carinho. 🧁\n\n1 — Cardápio e pedidos\n2 — Falar com a loja\n\nAtalhos: MENU · SACOLA · CANCELAR';
 const perguntaPagamento='Como deseja pagar?\n\n1 — Pix\n2 — Cartão\n3 — Dinheiro';
+const pagamentoPara = state => state.tipo === 'entrega' ? 'Entrega em domicílio: pagamento antecipado somente por Pix.\n\n1 — Pix\nO preparo começa após a loja confirmar o pagamento.' : perguntaPagamento + '\nO preparo começa após a loja confirmar o pagamento.';
 const perguntaRecebimento='Como deseja receber?\n\n1 — Retirada na loja, sem taxa\n2 — Entrega em Tietê, Jumirim ou Cerquilho\n\nVocê confere a taxa antes de confirmar.';
 const rotuloPagamento=valor=>({pix:'Pix',cartao:'Cartão',dinheiro:'Dinheiro'}[valor]||valor);
 export function novoEstado() { return {etapa:'menu',itens:[],chave:randomUUID()}; }
@@ -26,6 +27,15 @@ export async function responder(original,texto,servicos) {
     if (!['confirmar','sim'].includes(text)) return resposta('Estou verificando a confirmação anterior. Digite CONFIRMAR para consultar novamente, sem duplicar o pedido.');
     state.etapa='confirmar';
   }
+  const pedidoCancelamento = text.match(/^cancelar pedido(?:\s+#?(\d+))?$/);
+  if (pedidoCancelamento || (text === 'cancelar' && state.etapa === 'concluido')) {
+    const id = Number(pedidoCancelamento?.[1] || state.pedido?.id);
+    if (!id) return resposta('Informe CANCELAR PEDIDO seguido do número do pedido.');
+    try {
+      await servicos.cancelar(id);
+      return resposta(`Solicitação de cancelamento do pedido #${id} registrada para a loja. O preparo está bloqueado até a gestão avaliar. Aguarde a confirmação por aqui.`);
+    } catch (error) { return resposta(error.publicMessage || 'Não consegui registrar a solicitação. Tente novamente ou fale com a loja.'); }
+  }
   if (['cancelar','reiniciar'].includes(text)) {state=novoEstado();return resposta('Sacola reiniciada. Pedidos já confirmados continuam válidos.\n\n'+menu);}
   if (text === 'menu') {if(state.etapa==='humano')return resposta('O atendimento automático está pausado. Escreva REINICIAR para voltar ao menu.');return resposta(menu);}
   if (text==='atendente' || (state.etapa==='menu' && text==='2')) {state.etapa='humano';return resposta('Deixe sua mensagem para a loja. Para voltar ao bot, digite REINICIAR.');}
@@ -36,7 +46,7 @@ export async function responder(original,texto,servicos) {
   }
   if (state.etapa==='concluido') {
     if (text==='novo pedido') {state=novoEstado();return resposta(menu);}
-    return resposta(`Pedido #${state.pedido.id} já registrado. Avisaremos as atualizações por aqui.\n\nPara comprar de novo: NOVO PEDIDO.`);
+    return resposta(`Pedido #${state.pedido.id} já registrado. Avisaremos as atualizações por aqui.\n\nPara solicitar cancelamento antes do preparo: CANCELAR PEDIDO. Para comprar de novo: NOVO PEDIDO.`);
   }
   if (text==='sacola') return resposta(state.itens.length ? resumo(state)+'\n\nEscreva FECHAR para continuar.' : 'Sua sacola está vazia. Escreva CARDÁPIO para escolher.');
   if(state.etapa==='confirmar' && !state.tipo && original?.etapa!=='incerto') {state.etapa='recebimento';return resposta(perguntaRecebimento);}
@@ -49,7 +59,7 @@ export async function responder(original,texto,servicos) {
         tipo_recebimento:state.tipo||'retirada',cotacao_entrega:state.cotacao?.token,
         valor_produtos_confirmado:state.itens.reduce((s,i)=>s+i.preco*i.quantidade,0)});
       state.etapa='concluido';state.pedido=pedido;
-      return resposta(`Pedido #${pedido.id} confirmado! 🧁\nTotal: ${moeda(pedido.valor_total)}\n${rotuloPagamento(state.pagamento)} · pagamento pendente\n\nAvisaremos as atualizações por aqui.`);
+      return resposta(`Pedido #${pedido.id} confirmado! 🧁\nTotal: ${moeda(pedido.valor_total)}\n${rotuloPagamento(state.pagamento)} · pagamento pendente\n\nO preparo só começa após a loja confirmar o pagamento. Para solicitar cancelamento antes do preparo, escreva CANCELAR PEDIDO. Avisaremos as atualizações por aqui.`);
     } catch(error) {
       if(error.status===409 && /cota[cç][aã]o/i.test(error.publicMessage||'')) {state.etapa='complemento';delete state.cotacao;return resposta('A cotação expirou. Envie novamente o complemento (ou SEM) para recalcular e aprovar o total antes de confirmar.');}
       if(error.status===409 || error.status===400) {state.etapa='produto';return resposta(`Não foi possível confirmar: ${error.publicMessage}\nRevise a sacola. Escreva CANCELAR para começar de novo ou ATENDENTE para falar com a loja.`);}
@@ -62,7 +72,7 @@ export async function responder(original,texto,servicos) {
     state.nome=texto.trim();state.etapa='recebimento';return resposta(perguntaRecebimento);
   }
   if(state.etapa==='recebimento') {
-    if(['1','retirada','retirar'].includes(text)){state.tipo='retirada';delete state.cotacao;state.etapa='pagamento';return resposta(perguntaPagamento);}
+    if(['1','retirada','retirar'].includes(text)){state.tipo='retirada';delete state.cotacao;state.etapa='pagamento';return resposta(pagamentoPara(state));}
     if(['2','entrega'].includes(text)){state.tipo='entrega';state.etapa='cidade';return resposta('Qual é a cidade da entrega?\n1 — Tietê\n2 — Jumirim\n3 — Cerquilho');}
     return resposta(perguntaRecebimento);
   }
@@ -77,7 +87,7 @@ export async function responder(original,texto,servicos) {
   }
   if(state.etapa==='complemento' || state.etapa==='entrega_indisponivel') {
     if(state.etapa==='entrega_indisponivel') {
-      if(text==='1'){state.tipo='retirada';delete state.cotacao;state.etapa='pagamento';return resposta(perguntaPagamento);}
+      if(text==='1'){state.tipo='retirada';delete state.cotacao;state.etapa='pagamento';return resposta(pagamentoPara(state));}
       if(text==='3'){state.etapa='humano';return resposta('Deixe sua dúvida por aqui para a loja avaliar a entrega. Nenhum pedido foi confirmado.');}
       if(text!=='2')return resposta('1 — Retirar na loja\n2 — Tentar calcular novamente\n3 — Falar com atendente');
     } else {
@@ -94,14 +104,14 @@ export async function responder(original,texto,servicos) {
     }
   }
   if(state.etapa==='validar_endereco') {
-    if(['1','sim','correto'].includes(text)){state.etapa='pagamento';return resposta(perguntaPagamento);}
+    if(['1','sim','correto'].includes(text)){state.etapa='pagamento';return resposta(pagamentoPara(state));}
     if(text==='2'){delete state.cotacao;state.etapa='endereco';return resposta('Informe novamente rua, número e bairro.');}
     return resposta('Confira o endereço e digite 1 para aceitar ou 2 para corrigir.');
   }
   if(state.etapa==='pagamento') {
     if(!state.tipo){state.etapa='recebimento';return resposta(perguntaRecebimento);}
     const formas={'1':'pix','pix':'pix','2':'cartao','cartao':'cartao','3':'dinheiro','dinheiro':'dinheiro'};
-    if(!formas[text])return resposta('Escolha 1 para Pix, 2 para cartão ou 3 para dinheiro.');
+    if(!formas[text] || (state.tipo==='entrega' && formas[text]!=='pix')) return resposta(pagamentoPara(state));
     state.pagamento=formas[text];
     const produtos=await servicos.catalogo();
     for(const item of state.itens){const atual=produtos.find(p=>p.id===item.id);if(!atual){state.etapa='produto';return resposta(`${item.nome} não está mais disponível. Escreva CANCELAR para refazer a sacola ou ATENDENTE para ajuda.`);}item.preco=Number(atual.preco);}

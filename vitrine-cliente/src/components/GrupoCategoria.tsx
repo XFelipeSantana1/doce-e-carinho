@@ -1,17 +1,7 @@
 import type { Produto } from "../types";
 import { CardProduto } from "./CardProduto";
 
-// Uma categoria dentro do cardápio: cabeçalho editorial (numeração + nome
-// Playfair + filete) e a grade de doces — direto sobre o creme, sem cartão
-// em volta.
-//
-// No celular é LISTA escaneável em uma coluna: nome → descrição → preço →
-// ação, com miniatura à direita e hairlines separando os itens (é cardápio
-// impresso, não vitrine de caixinhas) — duas colunas empilhavam demais e o
-// carrossel lateral (versão anterior) escondia itens atrás de um gesto que
-// ninguém descobre. No desktop a grade é ASSIMÉTRICA: o primeiro produto da
-// categoria nasce grande (row-span 2) e os demais ficam menores ao lado —
-// a categoria tem um "capa" e um sumário, como página de revista.
+// Categorias usam a mesma grade e o mesmo tamanho de cartão, inclusive com poucos itens.
 interface PropriedadesGrupoCategoria {
   categoria: string;
   numero: string;
@@ -36,10 +26,6 @@ export function GrupoCategoria({
   aoAlterarQuantidade,
   aoRemover,
 }: PropriedadesGrupoCategoria): JSX.Element {
-  // Um "capa" grande só quando há ao menos 2 itens: categoria com um doce
-  // único não tem "demais" para contrapor.
-  const temCapa = itens.length > 1;
-
   return (
     <section
       id={identificador}
@@ -65,17 +51,14 @@ export function GrupoCategoria({
       </div>
       {/* Celular = lista em 1 coluna com hairlines (`divide-y`); a partir de
           sm os hairlines saem e volta a grade de cartões com vão. */}
-      <div className="grid grid-cols-1 divide-y divide-borda sm:grid-cols-2 sm:divide-y-0 sm:gap-3 lg:grid-cols-3 lg:gap-4">
-        {itens.map((produto, indice) => (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-5">
+        {itens.map((produto) => (
           <div
             key={produto.id}
-            // `row-span` vai na CÉLULA do grid (o wrapper), não no card
-            // interno — o article abaixo só estica para preencher.
-            className={`min-w-0 ${temCapa && indice === 0 ? "lg:row-span-2" : ""}`}
+            className="min-w-0 h-full"
           >
             <CardProduto
               produto={produto}
-              grande={temCapa && indice === 0}
               quantidadeNaSacola={quantidades[produto.id] ?? 0}
               aoAdicionar={aoAdicionar}
               aoAlterarQuantidade={aoAlterarQuantidade}

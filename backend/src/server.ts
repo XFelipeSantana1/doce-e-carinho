@@ -13,7 +13,8 @@ import registroRoutes from "./routes/registroRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import { validarApiKeyBot } from "./middleware/apiKeyBot.js";
 import { mensagemDoErro } from "./lib/erros.js";
-import { PASTA_UPLOAD, TAMANHO_MAXIMO } from "./services/uploadService.js";
+import { servirMidia } from "./controllers/midiaController.js";
+import { prepararMidias, migrarUploadsLocais, TAMANHO_MAXIMO } from "./services/uploadService.js";
 import { conferirEnv } from "./config/env.js";
 import { origensPermitidas } from "./config/origens.js";
 
@@ -36,7 +37,7 @@ app.use(cors({ origin: origensPermitidas() }));
 
 // Fotos de produto. Servir por rota (e não por CDN externo) porque o `img` da
 // vitrine aponta direto para cá e a imagem precisa sobreviver ao deploy.
-app.use("/uploads", express.static(PASTA_UPLOAD, { maxAge: "7d" }));
+app.get("/uploads/:nome", servirMidia);
 
 // O cardápio muda no painel e a vitrine precisa refletir na hora. O ETag do
 // Express faria o navegador responder "não mudou" a partir do conteúdo, o que
@@ -80,6 +81,10 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API rodando em http://localhost:${PORT}`);
-});
+async function iniciar(): Promise<void> {
+  await prepararMidias();
+  const migradas = await migrarUploadsLocais();
+  if (migradas) console.log(`[midias] ${migradas} fotos locais preservadas no banco.`);
+  app.listen(PORT, () => console.log(`API rodando em http://localhost:${PORT}`));
+}
+void iniciar().catch(erro => { console.error("[api] Falha ao iniciar:", mensagemDoErro(erro)); process.exit(1); });

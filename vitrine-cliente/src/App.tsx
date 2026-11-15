@@ -9,6 +9,7 @@ import { Abertura } from "./components/Abertura";
 import { Destaques } from "./components/Destaques";
 import { SecaoCardapio } from "./components/SecaoCardapio";
 import { Rodape } from "./components/Rodape";
+import type { DadosRecebimento } from "./lib/recebimento";
 import { Camadas } from "./components/Camadas";
 
 // Orquestra a vitrine: busca dados, guarda filtros e abre/fecha painéis.
@@ -26,6 +27,7 @@ export default function App(): JSX.Element {
   const [ajudaAberta, definirAjudaAberta] = useState(false);
   const [nomeCliente, definirNome] = useState("");
   const [observacao, definirObservacao] = useState("");
+  const [recebimento, definirRecebimento] = useState<DadosRecebimento>({tipo:"retirada", pagamento:"pix", endereco:""});
 
   // Depois dos estados de formulário de propósito: o hook só precisa dos
   // valores deles, e antes da declaração o `const` nem existiria.
@@ -34,15 +36,17 @@ export default function App(): JSX.Element {
     nomeCliente,
     observacao,
     mostrarAviso,
+    recebimento,
   );
 
   // Só a busca filtra aqui (case-insensitive); agrupar por categoria e
   // navegar entre seções é papel da SecaoCardapio (scroll-spy).
   const buscados = useMemo(() => {
-    const termo = termoBusca.trim().toLowerCase();
+    const normalizar = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const termo = normalizar(termoBusca.trim());
     if (termo === "") return produtos;
     return produtos.filter((produto) =>
-      `${produto.nome} ${produto.descricao}`.toLowerCase().includes(termo),
+      normalizar(`${produto.nome} ${produto.descricao}`).includes(termo),
     );
   }, [produtos, termoBusca]);
 
@@ -119,6 +123,8 @@ export default function App(): JSX.Element {
         total={total}
         nomeCliente={nomeCliente}
         observacao={observacao}
+        recebimento={recebimento}
+        aoMudarRecebimento={definirRecebimento}
         configAberto={configAberto}
         ajudaAberta={ajudaAberta}
         aviso={aviso}

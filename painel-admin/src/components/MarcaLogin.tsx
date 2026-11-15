@@ -1,12 +1,18 @@
 import { MarcaWordmark } from "./MarcaWordmark";
 
-// Lado da marca da tela de login (5.6): SEM foto, SEM gradiente, SEM faixa
-// translúcida. O desktop é uma coluna AREIA LISA com o lockup pregado no
-// canto inferior esquerdo (flex items-end p-12) — a página inteira respira
-// papel; a marca fala com tipografia, não com paisagem.
+// Lado da marca da tela de login. A coluna agora tem FOTO de confeitaria ao
+// fundo (pedido do autor): a imagem cobre a coluna inteira e um degradê
+// AREIA — a cor do papel do projeto — escurece a base onde o lockup fica
+// pregado, para o texto escuro continuar com contraste sobre a foto.
 //
-// No celular o wordmark vira uma faixa no topo, à esquerda — o rótulo de
-// página; o resto da tela é o formulário.
+// Regra que não muda: nada de faixa translúcida arredondada nem caixa; o
+// wordmark continua "solto" sobre o papel, só que o papel agora é a foto.
+//
+// No celular o wordmark vira uma faixa no topo, à esquerda, sem foto — o
+// rótulo de página não precisa de paisagem e a foto atrasaria o formulário.
+const FOTO_CONFEITARIA =
+  "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80";
+
 export function MarcaLogin({ compacta = false }: { compacta?: boolean }): JSX.Element {
   return (
     <div
@@ -14,10 +20,29 @@ export function MarcaLogin({ compacta = false }: { compacta?: boolean }): JSX.El
       className={
         compacta
           ? "bg-areia px-5 py-4 md:hidden"
-          : "hidden items-end bg-areia p-12 md:flex"
+          : "relative hidden items-end overflow-hidden bg-areia p-12 md:flex"
       }
     >
-      <div className="flex flex-col gap-3">
+      {compacta ? null : (
+        <>
+          {/* Foto de fundo: preenche a coluna inteira (object-cover corta
+              pelo centro — confeitarias são horizontais, então recorta bem).
+              alt="" e aria-hidden: é puramente decorativa. */}
+          <img
+            src={FOTO_CONFEITARIA}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          {/* Degradê da cor do papel: opaco na base (legibilidade do lockup),
+              quase transparente no topo (a foto aparece de verdade). */}
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 bg-gradient-to-t from-areia via-areia/80 to-areia/10"
+          />
+        </>
+      )}
+      <div className="relative flex flex-col gap-3">
         <MarcaWordmark grande={!compacta} />
         <p
           className={

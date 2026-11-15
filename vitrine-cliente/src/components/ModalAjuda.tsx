@@ -1,3 +1,5 @@
+import { useCallback } from "react";
+import { useDialogo } from "../hooks/useDialogo";
 import { X } from "lucide-react";
 
 // Explica o pedido em 3 passos. Separado do App para o App não virar um
@@ -8,10 +10,14 @@ interface PropriedadesModalAjuda {
 }
 
 export function ModalAjuda({ aberto, aoFechar }: PropriedadesModalAjuda): JSX.Element | null {
+  const fechar = useCallback(() => aoFechar(), [aoFechar]);
+  const ref = useDialogo(aberto, fechar);
   if (!aberto) return null;
   return (
     <div
       className="fixed inset-0 z-[70] grid place-items-center bg-tinta/50 p-4"
+      ref={ref}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label="Como funciona"
@@ -29,13 +35,13 @@ export function ModalAjuda({ aberto, aoFechar }: PropriedadesModalAjuda): JSX.El
         </div>
         <ol className="flex list-none flex-col gap-3 p-0 font-corpo text-sm leading-relaxed text-pretty">
           <li>
-            <b className="font-semibold">1.</b> Toque em <b className="font-semibold">+</b> nos doces que você quer.
+            <b className="font-semibold">1.</b> Veja os detalhes de cada doce e escolha a quantidade.
           </li>
           <li>
-            <b className="font-semibold">2.</b> Abra a <b className="font-semibold">sacola</b>, confira e diga seu nome.
+            <b className="font-semibold">2.</b> Abra a <b className="font-semibold">sacola</b>, confira os itens, escolha entrega ou retirada e informe seus dados.
           </li>
           <li>
-            <b className="font-semibold">3.</b> Toque em <b className="font-semibold">Finalizar no WhatsApp</b> — a mensagem já vai
+            <b className="font-semibold">3.</b> Toque em <b className="font-semibold">Continuar no WhatsApp</b> — a mensagem já vai
             prontinha, é só enviar.
           </li>
         </ol>

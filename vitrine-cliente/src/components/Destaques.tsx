@@ -15,7 +15,7 @@
 const GARANTIAS = [
   "Feito artesanalmente",
   "Pedido pelo WhatsApp",
-  "Sem cadastro nem pagamento no site",
+  "Entrega com Pix · retirada com mais opções",
 ] as const;
 
 export function Destaques(): JSX.Element {
@@ -26,11 +26,11 @@ export function Destaques(): JSX.Element {
           à esquerda liam como blocos "de divisão", um abaixo do outro);
           no desktop ficam em linha com hairline vertical entre elas
           (`divide-x`). */}
-      <ul className="flex flex-col items-center border-y border-borda py-0 text-center text-sm sm:flex-row sm:items-center sm:justify-center sm:divide-x sm:divide-borda sm:text-left">
+      <ul className="flex flex-wrap items-center justify-center border-y border-borda py-0 text-center text-xs sm:text-sm sm:flex-row sm:items-center sm:justify-center sm:divide-x sm:divide-borda sm:text-left">
         {GARANTIAS.map((garantia) => (
           <li
             key={garantia}
-            className="flex items-center py-3 px-4 sm:px-5 sm:py-3.5 sm:first:pl-0 sm:last:pr-0"
+            className="flex items-center py-2 px-3 sm:px-5 sm:py-3.5 sm:first:pl-0 sm:last:pr-0"
           >
             <span className="font-corpo font-semibold text-tinta">{garantia}</span>
           </li>

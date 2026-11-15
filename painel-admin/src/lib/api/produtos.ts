@@ -73,6 +73,7 @@ export async function atualizarProduto(
     categoria_id?: number | null;
     imagem_url?: string | null;
     ativo?: boolean;
+    ficha_tecnica?: ItemFicha[];
   },
 ): Promise<void> {
   await requisitar(`/produtos/${id}`, token, { method: "PUT", body: JSON.stringify(dados) });

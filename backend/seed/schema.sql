@@ -87,6 +87,13 @@ CREATE TABLE IF NOT EXISTS pedidos (
     entrega_distancia_metros INT NULL,
     entrega_simulada BOOLEAN NOT NULL DEFAULT FALSE,
     chave_bot           VARCHAR(80) NULL UNIQUE,
+    -- Código de 4 dígitos que o cliente apresenta na retirada (ou repassa ao
+    -- motoboy). Gerado quando o pedido entra em "pronto"; quem conclui é o
+    -- CÓDIGO validado (PATCH /:id/entregar), não um clique.
+    codigo_entrega      CHAR(4) NULL,
+    cancelamento_solicitado_em DATETIME NULL,
+    codigo_tentativas INT NOT NULL DEFAULT 0,
+    codigo_bloqueado_ate DATETIME NULL,
     aviso_pronto_estado ENUM('pendente','enviando','enviado','falha','incerto','bloqueado') NULL,
     aviso_pronto_enviado_em DATETIME NULL,
     criado_em           DATETIME            NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -151,4 +158,13 @@ CREATE TABLE IF NOT EXISTS avisos_pedido (
   enviado_em DATETIME NULL,
   PRIMARY KEY (pedido_id,status),
   CONSTRAINT fk_avisos_pedido FOREIGN KEY (pedido_id) REFERENCES pedidos(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Fotos persistidas junto do banco e incluídas no backup.
+CREATE TABLE IF NOT EXISTS midias (
+ nome VARCHAR(160) PRIMARY KEY,
+ mime VARCHAR(30) NOT NULL,
+ conteudo MEDIUMBLOB NOT NULL,
+ sha256 CHAR(64) NOT NULL,
+ criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

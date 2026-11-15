@@ -8,7 +8,7 @@ import { VazioLista } from "./ui/VazioLista";
 export function ListaMaisVendidos({ itens }: { itens: ProdutoVendido[] }): JSX.Element {
   return (
     <section>
-      <h2 className="text-base font-semibold text-tinta">Mais vendidos</h2>
+
       {itens.length === 0 ? (
         <VazioLista
           className="mt-2"

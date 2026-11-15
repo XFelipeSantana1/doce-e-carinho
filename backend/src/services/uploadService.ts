@@ -1,79 +1,47 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-
-// Upload de foto de produto.
-//
-// Decisão: a imagem chega como base64 no corpo JSON, e não como multipart.
-// Motivo: multipart exigiria trazer o multer (dependência nova) para um
-// recurso que a confeitaria usa meia dúzia de vezes. O base64 passa pelo
-// express.json que já existe, e o custo é o arquivo inchar 33% — irrelevante
-// para JPEG de 300 KB.
-//
-// A pasta fica FORA do versionamento: são fotos do cliente, não código.
-
-// Onde as fotos ficam. `process.cwd()` é a pasta de onde o backend foi
-// iniciado — no Codespace, `backend/`. Vira caminho absoluto na primeira vez,
-// então não importa a partir de onde o comando foi digitado.
-const PASTA_UPLOAD = path.resolve(process.cwd(), "uploads");
-
-// 5 MB. Acima disso não é foto de cardápio: é outra coisa, e o express.json
-// segura o corpo em memória antes do handler ver.
-const TAMANHO_MAXIMO = 5 * 1024 * 1024;
-
-// Só três formatos, porque o `<img>` renderiza todos e o resto (TIFF, BMP,
-// SVG) é peso ou vetor de script sem ganho nenhum aqui.
-const TIPOS: Record<string, string> = {
-  "image/jpeg": ".jpg",
-  "image/png": ".png",
-  "image/webp": ".webp",
-};
-
-export interface ResultadoUpload {
-  caminho: string;
+import { randomUUID, createHash } from 'node:crypto';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { RowDataPacket } from 'mysql2';
+import pool from '../config/db.js';
+import { decodificarImagem, mimeDaImagem, TAMANHO_MAXIMO } from '../lib/imagem.js';
+export { TAMANHO_MAXIMO, ErroUpload } from '../lib/imagem.js';
+// Caminho relativo ao módulo: funciona com tsx e com dist, de qualquer cwd.
+export const PASTA_UPLOAD=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../uploads');
+const EXTENSOES:Record<string,string>={'image/jpeg':'.jpg','image/png':'.png','image/webp':'.webp'};
+export const SQL_MIDIAS=`CREATE TABLE IF NOT EXISTS midias (
+ nome VARCHAR(160) PRIMARY KEY,
+ mime VARCHAR(30) NOT NULL,
+ conteudo MEDIUMBLOB NOT NULL,
+ sha256 CHAR(64) NOT NULL,
+ criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB`;
+export async function prepararMidias():Promise<void>{await pool.query(SQL_MIDIAS);}
+export async function guardarMidia(nome:string,mime:string,bytes:Buffer):Promise<void>{
+ await pool.execute('INSERT IGNORE INTO midias (nome,mime,conteudo,sha256) VALUES (?,?,?,?)',[nome,mime,bytes,createHash('sha256').update(bytes).digest('hex')]);
 }
-
-/**
- * Grava a imagem e devolve o caminho público.
- *
- * O nome do arquivo é SEMPRE gerado aqui (UUID), nunca vindo do cliente: o
- * nome enviado pode conter "../" e sair da pasta, ou ter acentos que quebram
- * a URL depois. Só a extensão vem da lista acima.
- */
-export async function salvarImagem(dadosBase64: string, mime: string): Promise<ResultadoUpload> {
-  const extensao = TIPOS[mime];
-  if (extensao === undefined) {
-    throw new ErroUpload("Formato não aceito. Use JPG, PNG ou WebP.");
-  }
-
-  // O data URL vem como "data:image/jpeg;base64,XXXX" — corta o prefixo.
-  const conteudo = dadosBase64.includes(",")
-    ? dadosBase64.slice(dadosBase64.indexOf(",") + 1)
-    : dadosBase64;
-
-  const bytes = Buffer.from(conteudo, "base64");
-
-  if (bytes.length === 0) {
-    throw new ErroUpload("O arquivo veio vazio.");
-  }
-  // Confia no tamanho decodificado, não no texto enviado: base64 mente fácil.
-  if (bytes.length > TAMANHO_MAXIMO) {
-    throw new ErroUpload("Foto muito grande. O limite é 5 MB.");
-  }
-
-  await mkdir(PASTA_UPLOAD, { recursive: true });
-  const nomeArquivo = `${randomUUID()}${extensao}`;
-  await writeFile(path.join(PASTA_UPLOAD, nomeArquivo), bytes);
-
-  return { caminho: `/uploads/${nomeArquivo}` };
+export async function salvarImagem(dadosBase64:string,mime:string):Promise<{caminho:string}>{
+ const bytes=decodificarImagem(dadosBase64,mime);
+ const nome=randomUUID()+EXTENSOES[mime];
+ await guardarMidia(nome,mime,bytes);
+ return {caminho:'/uploads/'+nome};
 }
-
-export class ErroUpload extends Error {
-  status: number;
-  constructor(mensagem: string) {
-    super(mensagem);
-    this.status = 400;
-  }
+interface Midia extends RowDataPacket {mime:string;conteudo:Buffer;sha256:string}
+export async function buscarMidia(nome:string):Promise<Midia|null>{
+ if(!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$/.test(nome))return null;
+ const [rows]=await pool.execute<Midia[]>('SELECT mime,conteudo,sha256 FROM midias WHERE nome=?',[nome]);
+ return rows[0]??null;
 }
-
-export { PASTA_UPLOAD, TAMANHO_MAXIMO };
+// Migração idempotente: preserva os caminhos e os arquivos antigos; não sobrescreve fotos.
+export async function migrarUploadsLocais():Promise<number>{
+ let arquivos;try{arquivos=await readdir(PASTA_UPLOAD,{withFileTypes:true});}catch(e){if((e as NodeJS.ErrnoException).code==='ENOENT')return 0;throw e;}
+ let total=0;
+ for(const arquivo of arquivos){
+  if(!arquivo.isFile() || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,159}$/.test(arquivo.name))continue;
+  const [existentes]=await pool.query<RowDataPacket[]>('SELECT nome FROM midias WHERE nome=?',[arquivo.name]);if(existentes.length)continue;
+  const bytes=await readFile(path.join(PASTA_UPLOAD,arquivo.name));const mime=mimeDaImagem(bytes);
+  if(!mime || bytes.length>TAMANHO_MAXIMO){console.warn('[midias] Arquivo legado não migrado:',arquivo.name);continue;}
+  await guardarMidia(arquivo.name,mime,bytes);total++;
+ }
+ return total;
+}

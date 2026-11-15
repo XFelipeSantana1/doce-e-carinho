@@ -73,13 +73,18 @@ export async function notificarPedidoPronto(id: number): Promise<{ estado: Estad
   catch { console.error('[aviso-pronto] Não foi possível verificar o envio do pedido', id); return { estado: 'incerto' }; }
 }
 
-export function mensagemStatus(id: number, status: string, tipo: string): string {
+// Mensagem do aviso. `codigo` vem da coluna codigo_entrega do pedido: entra
+// na mensagem nos dois momentos em que o cliente precisa dele — retirada
+// ("pronto", apresenta na loja) e entrega ("saiu_para_entrega", repassa ao
+// motoboy). Nos outros status o código não diz nada e fica fora.
+export function mensagemStatus(id: number, status: string, tipo: string, codigo?: string | null): string {
   const entrega = tipo === 'entrega';
+  const comCodigo = codigo ? `\n\n🔑 Código de confirmação: *${codigo}*\nInforme este código somente ao receber o pedido, ao motorista ou na retirada na loja.` : '';
   const mensagens: Record<string, string> = {
     pagamento_confirmado: `Pagamento do pedido #${id} confirmado! Obrigado.`,
     em_preparo: `Seu pedido #${id} está em preparo! 🧁`,
-    pronto: entrega ? `Pedido #${id} pronto, aguardando a saída para entrega.` : `Pedido #${id} pronto para retirada! 🧁`,
-    saiu_para_entrega: `Seu pedido #${id} saiu para entrega!`,
+    pronto: entrega ? `Pedido #${id} pronto, aguardando a saída para entrega.${comCodigo}` : `Pedido #${id} pronto para retirada! 🧁${comCodigo}`,
+    saiu_para_entrega: `Seu pedido #${id} saiu para entrega! 🛵 O motoboy está a caminho.${comCodigo}`,
     entregue: entrega ? `Entrega do pedido #${id} concluída. Obrigado!` : `Retirada do pedido #${id} concluída. Obrigado!`,
     cancelado: `Seu pedido #${id} foi cancelado. Se você já pagou, fale com a loja por aqui para combinar o reembolso.`,
   };
@@ -105,8 +110,8 @@ export async function notificarStatusPedido(id: number, status: string): Promise
       if (status === 'pronto') await reais.registrar(pedidoId, estado);
     },
     async enviar(telefone) {
-      const [rows] = await pool.query<RowDataPacket[]>('SELECT tipo_recebimento FROM pedidos WHERE id=?', [id]);
-      await reais.enviar(telefone, mensagemStatus(id, status, String(rows[0].tipo_recebimento)));
+      const [rows] = await pool.query<RowDataPacket[]>('SELECT tipo_recebimento, codigo_entrega FROM pedidos WHERE id=?', [id]);
+      await reais.enviar(telefone, mensagemStatus(id, status, String(rows[0].tipo_recebimento), rows[0].codigo_entrega as string | null));
     },
   };
   try { return await executarAvisoPronto(id, deps); }

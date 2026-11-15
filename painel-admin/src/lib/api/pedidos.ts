@@ -6,6 +6,7 @@ import { requisitar } from "./base";
 import { normalizarDataApi } from '../dataApi';
 function recebimento(dados: Record<string, unknown>) {
   return {
+    cancelamento_solicitado_em: dados.cancelamento_solicitado_em ? String(dados.cancelamento_solicitado_em) : null,
     tipo_recebimento: String(dados.tipo_recebimento ?? 'retirada'),
     entrega_simulada: Boolean(Number(dados.entrega_simulada)),
     entrega_cidade: (dados.entrega_cidade as string | null) ?? null,
@@ -13,6 +14,7 @@ function recebimento(dados: Record<string, unknown>) {
     entrega_complemento: (dados.entrega_complemento as string | null) ?? null,
     taxa_entrega: Number(dados.taxa_entrega) || 0,
     entrega_distancia_metros: dados.entrega_distancia_metros == null ? null : Number(dados.entrega_distancia_metros),
+    codigo_entrega: (dados.codigo_entrega as string | null) ?? null,
     aviso_status_estado: (dados.aviso_status_estado as string | null) ?? null,
     aviso_pagamento_estado: (dados.aviso_pagamento_estado as string | null) ?? null,
   };
@@ -79,10 +81,25 @@ export async function definirStatusPedido(
   token: string,
   id: number,
   status: string,
+  status_atual: string,
 ): Promise<void> {
   await requisitar(`/pedidos/${id}/status`, token, {
     method: "PATCH",
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, status_atual }),
+  });
+}
+
+/** PATCH /api/pedidos/:id/entregar — conclui com o CÓDIGO de confirmação.
+ *  A API recusa sem código (409) e recusa código errado: a baixa exige que
+ *  quem está com o pedido apresente o que o cliente recebeu no WhatsApp. */
+export async function confirmarEntregaPedido(
+  token: string,
+  id: number,
+  codigo: string,
+): Promise<void> {
+  await requisitar(`/pedidos/${id}/entregar`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ codigo }),
   });
 }
 

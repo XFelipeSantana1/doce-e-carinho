@@ -1,3 +1,4 @@
+import type { DadosRecebimento } from "../lib/recebimento";
 import type { ItemCarrinho } from "../types";
 import { CarrinhoDrawer } from "./CarrinhoDrawer";
 import { ModalAjuda } from "./ModalAjuda";
@@ -14,6 +15,8 @@ interface PropriedadesCamadas {
   total: number;
   nomeCliente: string;
   observacao: string;
+  recebimento: DadosRecebimento;
+  aoMudarRecebimento: (dados: DadosRecebimento) => void;
   configAberto: boolean;
   ajudaAberta: boolean;
   aviso: string | null;
@@ -35,6 +38,8 @@ export function Camadas({
   total,
   nomeCliente,
   observacao,
+  recebimento,
+  aoMudarRecebimento,
   configAberto,
   ajudaAberta,
   aviso,
@@ -55,7 +60,7 @@ export function Camadas({
           z-50) e é aria-hidden porque o botão fechar já cobre leitor de tela. */}
       {sacolaAberta && (
         <div
-          className="fixed inset-0 z-[60] animate-[aparecer_0.25s_ease] bg-tinta/45"
+          className="fixed inset-0 z-[60] animate-[aparecer_0.25s_ease] bg-tinta/45 backdrop-blur-sm"
           onClick={aoFecharSacola}
           aria-hidden="true"
         />
@@ -66,6 +71,8 @@ export function Camadas({
         total={total}
         nomeCliente={nomeCliente}
         observacao={observacao}
+        recebimento={recebimento}
+        aoMudarRecebimento={aoMudarRecebimento}
         aoMudarNome={aoMudarNome}
         aoMudarObservacao={aoMudarObservacao}
         aoAlterarQuantidade={aoAlterarQuantidade}

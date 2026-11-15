@@ -103,3 +103,24 @@ INSERT IGNORE INTO avisos_pedido (pedido_id,status,estado,enviado_em) SELECT id,
 
 SET @sim_sql=(SELECT IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pedidos' AND column_name='entrega_simulada')>0,'SELECT 1','ALTER TABLE pedidos ADD COLUMN entrega_simulada BOOLEAN NOT NULL DEFAULT FALSE'));
 PREPARE stmt_sim FROM @sim_sql; EXECUTE stmt_sim; DEALLOCATE PREPARE stmt_sim;
+
+-- Código de confirmação da entrega/retirada: gerado quando o pedido entra em
+-- "pronto"; a baixa (entregue) só acontece com o código digitado no painel.
+SET @codigo_sql=(SELECT IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pedidos' AND column_name='codigo_entrega')>0,'SELECT 1','ALTER TABLE pedidos ADD COLUMN codigo_entrega CHAR(4) NULL'));
+PREPARE stmt_codigo FROM @codigo_sql; EXECUTE stmt_codigo; DEALLOCATE PREPARE stmt_codigo;
+-- Controle de pedidos: solicitações e tentativas de código.
+SET @pedido_sql=(SELECT IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pedidos' AND column_name='cancelamento_solicitado_em')>0,'SELECT 1','ALTER TABLE pedidos ADD COLUMN cancelamento_solicitado_em DATETIME NULL'));
+PREPARE stmt_pedido FROM @pedido_sql; EXECUTE stmt_pedido; DEALLOCATE PREPARE stmt_pedido;
+SET @pedido_sql=(SELECT IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pedidos' AND column_name='codigo_tentativas')>0,'SELECT 1','ALTER TABLE pedidos ADD COLUMN codigo_tentativas INT NOT NULL DEFAULT 0'));
+PREPARE stmt_pedido FROM @pedido_sql; EXECUTE stmt_pedido; DEALLOCATE PREPARE stmt_pedido;
+SET @pedido_sql=(SELECT IF((SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pedidos' AND column_name='codigo_bloqueado_ate')>0,'SELECT 1','ALTER TABLE pedidos ADD COLUMN codigo_bloqueado_ate DATETIME NULL'));
+PREPARE stmt_pedido FROM @pedido_sql; EXECUTE stmt_pedido; DEALLOCATE PREPARE stmt_pedido;
+
+-- Fotos persistidas junto do banco e incluídas no backup.
+CREATE TABLE IF NOT EXISTS midias (
+ nome VARCHAR(160) PRIMARY KEY,
+ mime VARCHAR(30) NOT NULL,
+ conteudo MEDIUMBLOB NOT NULL,
+ sha256 CHAR(64) NOT NULL,
+ criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;

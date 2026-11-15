@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
 import type { ItemCarrinho } from "../types";
 import { imagemParaProduto } from "../lib/aparenciaProduto";
+import { estaDisponivel } from "../lib/disponibilidade";
 import { formatarMoeda } from "../lib/formatarMoeda";
 
 // Uma linha da sacola: foto, nome, preço e controle de quantidade.
@@ -31,7 +32,7 @@ export function ItemSacola({
   }, [produto.id]);
 
   return (
-    <div className="flex items-center gap-3 py-3">
+    <div className="loja-item-sacola">
       <div
         className="h-12 w-12 flex-none overflow-hidden rounded-campo bg-areia"
         aria-hidden="true"
@@ -52,7 +53,7 @@ export function ItemSacola({
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <b className="block truncate font-corpo text-sm font-semibold text-tinta">
+        <b className="block font-corpo text-sm font-semibold text-tinta">
           {produto.nome}
         </b>
         {/* Preços em Manrope tabular: os algarismos mudam de largura quando a
@@ -66,7 +67,7 @@ export function ItemSacola({
       </div>
       {/* Alvos de 44px (h-11): a gaveta no celular é tela inteira e o polegar
           erra alvos de 28px. */}
-      <div className="flex flex-none items-center gap-1">
+      <div className="loja-item-controles">
         <button
           onClick={() => aoAlterarQuantidade(produto.id, -1)}
           aria-label={`Tirar um ${produto.nome} da sacola`}
@@ -78,6 +79,7 @@ export function ItemSacola({
           {quantidade}
         </b>
         <button
+          disabled={!estaDisponivel(produto) || (produto.quantidadeDisponivel !== undefined && quantidade >= produto.quantidadeDisponivel)}
           onClick={() => aoAlterarQuantidade(produto.id, 1)}
           aria-label={`Colocar mais um ${produto.nome} na sacola`}
           className="grid h-11 w-11 place-items-center rounded-campo border border-borda bg-white font-corpo text-lg font-semibold text-tinta transition-colors hover:bg-tinta hover:text-creme active:translate-y-px"

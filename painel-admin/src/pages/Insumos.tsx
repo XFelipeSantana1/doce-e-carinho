@@ -6,6 +6,7 @@ import { ErroApi } from "../lib/api";
 import { EsqueletoTabela } from "../components/ui/EsqueletoTabela";
 import { Botao } from "../components/ui/Botao";
 import { BuscaComContagem } from "../components/BuscaComContagem";
+import { PainelSecao, Indicadores } from "../components/PainelSecao";
 import { CabecalhoSecao } from "../components/CabecalhoSecao";
 import { TabelaInsumos } from "../components/TabelaInsumos";
 import { ModaisInsumo, type JanelaInsumo } from "../components/ModaisInsumo";
@@ -43,13 +44,16 @@ export function Insumos(): JSX.Element {
   // chamar a API a cada tecla deixaria a tela piscando. O filtro também ignora
   // maiúsculas e acentos, porque nobody digita "acucar" procurando "Açúcar".
   const [termo, definirTermo] = useState("");
+  const [somenteBaixo, definirSomenteBaixo] = useState(false);
+  const baixos = insumos.filter(i=>i.quantidade_atual<=i.quantidade_minima);
   const insumosVisiveis = useMemo(() => {
-    const alvo = termo.trim().toLowerCase();
-    if (alvo === "") return insumos;
+    const alvo = termo.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const base = somenteBaixo ? insumos.filter(i=>i.quantidade_atual<=i.quantidade_minima) : insumos;
+    if (alvo === "") return base;
     const semAcento = (texto: string) =>
       texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return insumos.filter((insumo) => semAcento(insumo.nome).toLowerCase().includes(alvo));
-  }, [insumos, termo]);
+    return base.filter((insumo) => semAcento(insumo.nome).toLowerCase().includes(alvo));
+  }, [insumos, termo, somenteBaixo]);
 
   async function executar(acao: () => Promise<unknown>): Promise<void> {
     definirSalvando(true);
@@ -74,7 +78,7 @@ export function Insumos(): JSX.Element {
   }
 
   return (
-    <div className="flex flex-col gap-4 md:gap-5">
+    <div className="admin-page">
       <CabecalhoSecao
         titulo="Insumos"
         acao={
@@ -82,6 +86,9 @@ export function Insumos(): JSX.Element {
         }
       />
 
+      <Indicadores itens={[{rotulo:'Insumos cadastrados',valor:insumos.length,descricao:'Ingredientes da produção'},{rotulo:'Precisam de reposição',valor:baixos.length,descricao:'No limite ou abaixo do mínimo'},{rotulo:'Estoque normal',valor:insumos.length-baixos.length,descricao:'Acima da quantidade mínima'}]}/>
+      <PainelSecao titulo="Controle de insumos" descricao="Disponível, mínimo e movimentações no mesmo lugar.">
+      <div className="admin-toolbar">
       <BuscaComContagem
         valor={termo}
         aoMudar={definirTermo}
@@ -91,6 +98,8 @@ export function Insumos(): JSX.Element {
         total={insumos.length}
         palavra="insumos"
       />
+      </div>
+      <div className="admin-filters" role="group" aria-label="Filtrar estoque"><button aria-pressed={!somenteBaixo} onClick={()=>definirSomenteBaixo(false)}>Todos <span>{insumos.length}</span></button><button aria-pressed={somenteBaixo} onClick={()=>definirSomenteBaixo(true)}>Precisam de reposição <span>{baixos.length}</span></button></div>
 
       {carregando ? (
         <EsqueletoTabela linhas={4} />
@@ -108,6 +117,8 @@ export function Insumos(): JSX.Element {
           <b className="block text-base font-semibold text-tinta">Nenhum insumo cadastrado</b>
           <p className="mt-1 text-sm text-textoSuave">Cadastre o primeiro para montar as fichas técnicas.</p>
         </div>
+      ) : insumosVisiveis.length === 0 ? (
+        <div className="admin-panel-empty"><strong>{somenteBaixo ? 'Nenhum insumo precisa de reposição' : 'Nenhum insumo encontrado'}</strong>{termo.trim() ? 'Altere a busca para encontrar outro ingrediente.' : 'Os ingredientes estão acima do limite mínimo configurado.'}</div>
       ) : (
         <TabelaInsumos
           insumos={insumosVisiveis}
@@ -117,6 +128,7 @@ export function Insumos(): JSX.Element {
         />
       )}
 
+      </PainelSecao>
       <ModaisInsumo
         janela={janela}
         salvando={salvando}

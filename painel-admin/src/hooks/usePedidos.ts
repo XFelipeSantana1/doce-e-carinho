@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Pedido } from "../types";
-import { ErroApi, definirPagamentoPedido, definirStatusPedido, listarPedidos } from "../lib/api";
+import { ErroApi, confirmarEntregaPedido, definirPagamentoPedido, definirStatusPedido, listarPedidos } from "../lib/api";
 
 // Lista de pedidos com filtro por status.
 //
@@ -19,7 +19,9 @@ export function usePedidos(token: string | null): {
   erro: string | null;
   precisaLogin: boolean;
   buscarNovamente: () => void;
-  mudarStatus: (id: number, status: string) => Promise<void>;
+  mudarStatus: (id: number, status: string, statusAtual: string) => Promise<void>;
+  /** Conclui o pedido com o código que o cliente recebeu no WhatsApp. */
+  concluirComCodigo: (id: number, codigo: string) => Promise<void>;
   mudarPagamento: (id: number, status: string) => Promise<void>;
 } {
   const [todos, definirTodos] = useState<Pedido[]>([]);
@@ -28,12 +30,12 @@ export function usePedidos(token: string | null): {
   const [erro, definirErro] = useState<string | null>(null);
   const [precisaLogin, definirPrecisaLogin] = useState(false);
 
-  const buscar = useCallback(async () => {
+  const buscar = useCallback(async (silencioso = false) => {
     if (!token) {
       definirCarregando(false);
       return;
     }
-    definirCarregando(true);
+    if (!silencioso) definirCarregando(true);
     definirErro(null);
     // Zera a partir de cada busca: sem isso, um 401 isolado deixaria a tela
     // presa no "sair" mesmo depois de a sessão voltar.
@@ -55,12 +57,26 @@ export function usePedidos(token: string | null): {
     buscar();
   }, [buscar]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => { if (!document.hidden) void buscar(true); }, 10000);
+    return () => window.clearInterval(timer);
+  }, [buscar]);
+
   // Recarrega em vez de remendar a linha: cancelar um pedido pago também
   // estorna o pagamento, e um update local deixaria a linha mostrando "a
   // receber" para um pedido cancelado.
-  async function mudarStatus(id: number, status: string): Promise<void> {
+  async function mudarStatus(id: number, status: string, statusAtual: string): Promise<void> {
     if (!token) return;
-    await definirStatusPedido(token, id, status);
+    await definirStatusPedido(token, id, status, statusAtual);
+    await buscar();
+  }
+
+  // Conclusão por CÓDIGO: a API confere o que o cliente recebeu. Recarrega
+  // como o mudarStatus — a linha muda de aba e o código consumido some da
+  // lista de "em andamento".
+  async function concluirComCodigo(id: number, codigo: string): Promise<void> {
+    if (!token) return;
+    await confirmarEntregaPedido(token, id, codigo);
     await buscar();
   }
 
@@ -80,6 +96,7 @@ export function usePedidos(token: string | null): {
     precisaLogin,
     buscarNovamente: buscar,
     mudarStatus,
+    concluirComCodigo,
     mudarPagamento,
   };
 }

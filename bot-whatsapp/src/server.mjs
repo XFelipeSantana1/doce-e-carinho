@@ -34,6 +34,7 @@ async function processar(event) {
     const services={telefone:process.env.BOT_TEST_PHONE,salvar:s=>save(chat,s),
       catalogo:()=>api(base+'/bot/produtos',{headers:{'x-api-key':process.env.BOT_API_KEY}}),
       cotar:body=>api(base+'/bot/entrega/cotar',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.BOT_API_KEY},body:JSON.stringify(body)}),
+      cancelar:id=>api(base+'/bot/pedidos/'+id+'/cancelamento',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.BOT_API_KEY},body:JSON.stringify({whatsapp:process.env.BOT_TEST_PHONE})}),
       criar:body=>api(base+'/bot/pedidos',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':process.env.BOT_API_KEY},body:JSON.stringify(body)})};
     const result=typeof p.body==='string'&&p.body.trim() ? await responder(state,p.body.trim(),services) : {state,text:'Por enquanto consigo atender por texto. Escreva MENU para começar.'};
     if(result.state)await save(chat,result.state);

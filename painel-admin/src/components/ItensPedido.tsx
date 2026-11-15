@@ -1,81 +1,13 @@
-import type { DetalhePedido } from "../types";
-import { formatarMoeda } from "../lib/formatarMoeda";
-import { rotuloPagamento } from "../lib/pedido";
-import { STATUS_PAGAMENTO } from "../types";
-
-// Corpo do drawer: cliente, itens, total e seletor de pagamento. Recebe
-// callbacks prontos — buscar e salvar continuam no DrawerPedido.
-//
-// Total NÃO é mais faixa escura dentro da gaveta (caixa dentro de caixa era
-// exatamente o padrão do fim): é a última linha do ledger — "Total" à
-// esquerda com peso maior, valor à direita em Manrope text-lg semibold
-// tabular. O select de pagamento segue o padrão de campo da 3.5.
-interface PropriedadesItensPedido {
-  detalhe: DetalhePedido;
-  desabilitado: boolean;
-  aoTrocarPagamento: (valor: string) => void;
-}
-
-export function ItensPedido({
-  detalhe,
-  desabilitado,
-  aoTrocarPagamento,
-}: PropriedadesItensPedido): JSX.Element {
-  return (
-    <>
-      {/* Cliente como ledger (hairline embaixo), não caixa dentro da gaveta. */}
-      <div className="border-b border-borda pb-3 text-sm">
-        <b className="block font-medium text-tinta">{detalhe.cliente_nome ?? "Cliente"}</b>
-        <span className="text-textoSuave">{detalhe.whatsapp}</span>
-      </div>
-      <ul className="flex flex-col divide-y divide-borda text-sm">
-        <li className="py-3 text-sm">
-          <b>{detalhe.tipo_recebimento === 'entrega' ? 'Entrega' : 'Retirada na loja'}</b>
-          {detalhe.tipo_recebimento === 'entrega' ? <>
-            <p>{detalhe.entrega_endereco}</p>
-            {detalhe.entrega_complemento ? <p>Complemento: {detalhe.entrega_complemento}</p> : null}
-            <p>Taxa de entrega: {formatarMoeda(detalhe.taxa_entrega ?? 0)}</p>
-            <p>Produtos: {formatarMoeda(detalhe.valor_total - (detalhe.taxa_entrega ?? 0))}</p>
-          </> : null}
-        </li>
-        {detalhe.itens.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 py-2.5">
-            <span className="min-w-0 flex-1 text-tinta">
-              <b className="block font-medium">
-                {item.quantidade}x {item.produto_nome}
-              </b>
-              <span className="font-numero text-xs text-textoSuave">
-                {formatarMoeda(item.preco_unitario)} cada
-              </span>
-            </span>
-            <b className="flex-none font-numero font-semibold tabular-nums text-tinta">
-              {formatarMoeda(item.subtotal)}
-            </b>
-          </li>
-        ))}
-      </ul>
-      {/* Última linha do ledger: sem caixa, sem faixa escura. */}
-      <div className="flex min-h-12 items-center justify-between gap-3 border-t border-borda py-2 text-sm">
-        <span className="font-semibold text-tinta">Total</span>
-        <b className="font-numero text-lg font-semibold tabular-nums text-tinta">
-          {formatarMoeda(detalhe.valor_total)}
-        </b>
-      </div>
-      <label className="flex flex-col gap-1.5 text-sm font-medium text-tinta">
-        Pagamento ({rotuloPagamento(detalhe.status_pagamento)})
-        <select
-          value={detalhe.status_pagamento}
-          disabled={desabilitado}
-          onChange={(evento) => aoTrocarPagamento(evento.target.value)}
-          className="h-11 rounded-campo border border-textoSuave/80 bg-white px-3 font-corpo text-base text-tinta outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-60 focus:border-caramelo focus:ring-2 focus:ring-caramelo/40"
-        >
-          {STATUS_PAGAMENTO.map((opcao) => (
-            <option key={opcao} value={opcao}>
-              {rotuloPagamento(opcao)}
-            </option>
-          ))}
-        </select>
-      </label>
-    </>
-  );
+import type {DetalhePedido} from '../types';
+import {STATUS_PAGAMENTO} from '../types';
+import {formatarMoeda} from '../lib/formatarMoeda';
+import {rotuloPagamento} from '../lib/pedido';
+import {Estado} from './ui/Badge';
+export function ItensPedido({detalhe:d,desabilitado,aoTrocarPagamento}:{detalhe:DetalhePedido;desabilitado:boolean;aoTrocarPagamento:(valor:string)=>void}):JSX.Element {
+ const forma=({pix:'Pix',cartao:'Cartão',dinheiro:'Dinheiro'} as Record<string,string>)[d.forma_pagamento??'']??'Não informada';
+ return <>
+  <section className="admin-detail-group"><h3>Cliente e recebimento</h3><strong className="block text-sm font-medium">{d.cliente_nome??'Cliente'}</strong><p className="mt-1">{d.whatsapp}</p><div className="mt-4 border-t border-borda pt-3"><span className="text-sm font-medium">{d.tipo_recebimento==='entrega'?'Entrega em domicílio':'Retirada na loja'}</span>{d.tipo_recebimento==='entrega'?<><p className="mt-1">{d.entrega_endereco}</p>{d.entrega_complemento?<p>{d.entrega_complemento}</p>:null}<p className="mt-2">Taxa de entrega: {formatarMoeda(d.taxa_entrega??0)}</p></>:null}</div></section>
+  <section className="admin-detail-group"><h3>Itens do pedido</h3><ul className="divide-y divide-borda">{d.itens.map(i=><li key={i.id} className="flex items-start justify-between gap-4 py-3"><span className="min-w-0"><strong className="block text-sm font-medium">{i.quantidade}x {i.produto_nome}</strong><span className="mt-1 block text-xs text-textoSuave">{formatarMoeda(i.preco_unitario)} cada</span></span><b className="flex-none font-numero text-sm font-semibold">{formatarMoeda(i.subtotal)}</b></li>)}</ul>{d.taxa_entrega?<p className="mt-2">Entrega: {formatarMoeda(d.taxa_entrega)}</p>:null}<div className="admin-order-total"><span>Total do pedido</span><strong>{formatarMoeda(d.valor_total)}</strong></div></section>
+  <section className="admin-detail-group"><h3>Pagamento</h3><div className="mb-3 flex items-center justify-between gap-3"><span className="text-sm font-medium">{forma}</span><Estado tom={d.status_pagamento==='pago'?'ok':d.status_pagamento==='estornado'?'suave':'alerta'}>{rotuloPagamento(d.status_pagamento)}</Estado></div><label className="flex flex-col gap-2 text-xs text-textoSuave">Situação do pagamento<select className="admin-select w-full" value={d.status_pagamento} disabled={desabilitado||d.status==='entregue'||(d.status==='cancelado'&&d.status_pagamento!=='pago')} onChange={e=>aoTrocarPagamento(e.target.value)}>{STATUS_PAGAMENTO.filter(opcao=>opcao===d.status_pagamento||(opcao==='estornado'?d.status==='cancelado'&&d.status_pagamento==='pago':d.status!=='cancelado'&&(opcao!=='pendente'||d.status==='pendente'))).map(opcao=><option key={opcao} value={opcao}>{rotuloPagamento(opcao)}</option>)}</select></label>{d.status==='pendente'&&d.status_pagamento!=='pago'?<p className="mt-3">Confirme o recebimento do pagamento para liberar o preparo.</p>:null}</section>
+ </>;
 }

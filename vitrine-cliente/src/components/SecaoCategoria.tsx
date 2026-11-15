@@ -24,8 +24,8 @@ export function SecaoCategoria({
       style={{ top: "var(--altura-cabecalho, 67px)" }}
     >
       <div
-        className="flex snap-x gap-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-        role="tablist"
+        className="loja-categorias"
+        role="navigation"
         aria-label="Categorias"
       >
         {opcoes.map((categoria) => {
@@ -33,14 +33,9 @@ export function SecaoCategoria({
           return (
             <button
               key={categoria}
-              role="tab"
-              aria-selected={selecionada}
+              aria-current={selecionada ? "true" : undefined}
               onClick={() => aoSelecionar(categoria)}
-              className={`flex-none snap-start whitespace-nowrap border-b-2 py-3 font-corpo text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-caramelo/40 ${
-                selecionada
-                  ? "border-caramelo text-tinta"
-                  : "border-transparent text-textoSuave hover:border-borda hover:text-tinta"
-              }`}
+
             >
               {categoria === TODAS_CATEGORIAS ? "Tudo" : categoria}
             </button>

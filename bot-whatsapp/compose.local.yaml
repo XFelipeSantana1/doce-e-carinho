@@ -7,6 +7,10 @@ services:
       - redis
     ports:
       - "127.0.0.1:3002:3002"
+    extra_hosts:
+      # No Linux (Codespace) host.docker.internal so existe com este mapeamento:
+      # aponta para o gateway da rede Docker, onde o backend da maquina escuta.
+      - "host.docker.internal:host-gateway"
     environment:
       BACKEND_URL: http://host.docker.internal:3000/api
       BOT_API_KEY: ${BOT_API_KEY:?configure .env.local}
@@ -46,6 +50,14 @@ services:
       WAHA_DASHBOARD_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?configure .env.local}
       WHATSAPP_SWAGGER_USERNAME: admin
       WHATSAPP_SWAGGER_PASSWORD: ${WAHA_DASHBOARD_PASSWORD:?configure .env.local}
+      # Webhook: cada mensagem recebida vai para o workflow do n8n (mesma rede).
+      # O header customizado carrega a chave que o webhook do n8n exige.
+      WHATSAPP_HOOK_URL: http://n8n:5678/webhook/confeitaria-whatsapp-teste
+      WHATSAPP_HOOK_EVENTS: message
+      WHATSAPP_HOOK_CUSTOM_HEADERS: x-bot-key:${BOT_WEBHOOK_KEY:?configure .env.local}
+      WHATSAPP_HOOK_RETRIES_POLICY: linear
+      WHATSAPP_HOOK_RETRIES_DELAY_SECONDS: 3
+      WHATSAPP_HOOK_RETRIES_ATTEMPTS: 3
     volumes:
       - waha_sessions:/app/.sessions
       - waha_media:/app/.media

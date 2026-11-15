@@ -2,7 +2,7 @@ import type { EstadoCardapio, Produto } from "../types";
 import {
   agruparPorCategoria,
   identificadorSecao,
-  separarDestaque,
+
 } from "../lib/secoes";
 import { useAvisosSacola } from "../hooks/useAvisosSacola";
 import { useSecaoVisivel } from "../hooks/useSecaoVisivel";
@@ -47,7 +47,8 @@ export function SecaoCardapio({
   const { carregando, atualizando, erro, modoDemonstracao } = estado;
   const secoes = agruparPorCategoria(produtos, categorias);
 
-  const { destaque, restantes } = separarDestaque(secoes, buscaAtiva);
+  const destaque = undefined;
+  const restantes = secoes;
 
   // A navegação e o observador de rolagem olham para o que está REALMENTE na
   // tela, e não para a lista bruta: o destaque sai da primeira categoria, e

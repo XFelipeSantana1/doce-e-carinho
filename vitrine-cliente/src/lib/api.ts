@@ -5,7 +5,7 @@ import type { Categoria, Produto, ProdutoBruto } from "../types";
 // Isso permite usar o MESMO build contra o backend local ou o publicado.
 // Aceita com ou sem o sufixo /api (cola sozinho quando falta): o erro mais
 // comum é colar a URL do Codespaces sem o /api no final.
-const URL_PADRAO = "http://localhost:3000/api";
+const URL_PADRAO = "/api";
 const CHAVE_ARMAZENAMENTO = "cg_api";
 
 function normalizarBase(url: string): string {
@@ -15,9 +15,10 @@ function normalizarBase(url: string): string {
 
 export function obterUrlBase(): string {
   const salva = localStorage.getItem(CHAVE_ARMAZENAMENTO);
-  if (salva && salva.trim() !== "") return normalizarBase(salva);
+  // Configuração antiga de localhost não funciona no navegador remoto do Codespaces.
+  if (salva && salva.trim() !== "" && !(location.hostname.endsWith(".app.github.dev") && /localhost|127\.0\.0\.1/.test(salva))) return normalizarBase(salva);
   const doAmbiente = import.meta.env.VITE_API_URL as string | undefined;
-  if (doAmbiente && doAmbiente.trim() !== "") return normalizarBase(doAmbiente);
+  if (doAmbiente && doAmbiente.trim() !== "" && !(location.hostname.endsWith(".app.github.dev") && /localhost|127\.0\.0\.1/.test(doAmbiente))) return normalizarBase(doAmbiente);
   return URL_PADRAO;
 }
 
@@ -52,7 +53,7 @@ export function normalizarProduto(bruto: ProdutoBruto): Produto {
     categoria: (bruto.categoria as string | null) ?? null,
     ativo: bruto.ativo ?? true,
     disponivel: bruto.disponivel,
-    quantidadeDisponivel: bruto.quantidade_disponivel,
+    quantidadeDisponivel: bruto.quantidade_disponivel == null ? undefined : Number(bruto.quantidade_disponivel),
   };
 }
 

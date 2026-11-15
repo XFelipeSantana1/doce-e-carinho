@@ -35,11 +35,7 @@ services:
     volumes:
       # Volume nomeado: sem ele, um `docker compose down` apaga o banco.
       #
-      # As FOTOS ficam fora, em `backend/uploads`, porque o backend roda na
-      # máquina (não em container) — o que significa que elas somem quando o
-      # disco é limpo, mesmo com o banco inteiro. É a pendência conhecida do
-      # projeto: enquanto o backend não entrar no Compose, foto nova não
-      # sobrevive a recriação da máquina. Ver a seção "Pendências" do README.
+      # Fotos enviadas ficam na tabela midias, no mesmo volume do banco.
       - mysql_data:/var/lib/mysql
 
 volumes:

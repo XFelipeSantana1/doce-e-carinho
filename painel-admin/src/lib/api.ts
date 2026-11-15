@@ -7,6 +7,7 @@ export {
   listarPedidos,
   obterPedido,
   definirStatusPedido,
+  confirmarEntregaPedido,
   definirPagamentoPedido,
   listarBaixoEstoque,
   listarMaisVendidos,

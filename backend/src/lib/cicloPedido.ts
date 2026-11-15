@@ -7,12 +7,12 @@
  * tinha saído. A tela nunca é o lugar de decidir regra que vale para todos.
  */
 
-/** Para onde cada status pode ir. Cancelar é sempre permitido de 3 estados. */
+/** Etapas sequenciais; cancelamento operacional somente antes do preparo. */
 const TRANSICOES: Record<string, string[]> = {
-  pendente: ["em_preparo", "pronto", "cancelado"],
-  em_preparo: ["pronto", "cancelado"],
-  pronto: ["saiu_para_entrega", "entregue", "cancelado"],
-  saiu_para_entrega: ["entregue", "cancelado"],
+  pendente: ["em_preparo", "cancelado"],
+  em_preparo: ["pronto"],
+  pronto: ["saiu_para_entrega", "entregue"],
+  saiu_para_entrega: ["entregue"],
   entregue: [],
   cancelado: [],
 };
@@ -34,6 +34,15 @@ export function podeMudar(deAtual: string, para: string): boolean {
 /** Estado sem próximo passo — usado para explicar o 409. */
 export function ehFinal(status: string): boolean {
   return FINAIS.includes(status);
+}
+
+/** Toda produção e conclusão exige pagamento confirmado pela gestão. */
+export function motivoBloqueioPagamento(para: string, _forma: string | null, statusPagamento: string): string | null {
+  return ["em_preparo", "pronto", "saiu_para_entrega", "entregue"].includes(para) && statusPagamento !== "pago"
+    ? "Confirme o pagamento antes de iniciar o preparo ou concluir o pedido." : null;
+}
+export function pagamentoPermitido(tipo: string, forma: unknown): boolean {
+  return tipo === 'entrega' ? forma === 'pix' : ['pix','cartao','dinheiro'].includes(String(forma));
 }
 
 /** Rótulos em português, para a mensagem de erro da API. */

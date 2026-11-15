@@ -1,7 +1,7 @@
 import { Pencil, PackagePlus, Trash2 } from "lucide-react";
 import type { Insumo } from "../types";
+import { formatarMoeda } from "../lib/formatarMoeda";
 import { Estado } from "./ui/Badge";
-import { BotaoAcao } from "./ui/AcoesLinha";
 
 // Lista de insumos (5.4): tabela ledger no desktop, linha de lista no
 // celular — direto sobre o creme, SEM moldura de cartão (720px de tabela
@@ -41,52 +41,7 @@ export function TabelaInsumos({
     <>
       {/* CELULAR: linha de lista. */}
       <ul className="divide-y divide-borda md:hidden">
-        {insumos.map((insumo) => (
-          <li key={insumo.id} className="flex items-center gap-1 py-1">
-            <div className="min-h-16 min-w-0 flex-1 py-1">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate font-medium text-tinta">{insumo.nome}</span>
-                <span className="flex-none font-numero text-sm font-semibold tabular-nums text-tinta">
-                  {insumo.quantidade_atual}
-                  <span className="ml-1 text-xs font-normal text-textoSuave">
-                    {insumo.unidade_medida}
-                  </span>
-                </span>
-              </div>
-              <div className="mt-0.5 flex items-baseline justify-between gap-3">
-                {/* 2ª linha: a SITUAÇÃO em texto à esquerda (não depende de
-                    cor), custo/un. em textoSuave à direita. */}
-                <Situacao insumo={insumo} className="text-xs" />
-                {/* Formato de cá Registers igual ao de antes (ponto decimal —
-                    fora do escopo, registrado em PROGRESSO.md). */}
-                <span className="flex-none font-numero text-xs tabular-nums text-textoSuave">
-                  R$ {insumo.custo_unitario.toFixed(2)}/un
-                </span>
-              </div>
-            </div>
-            <BotaoAcao
-              onClick={() => aoMovimentar(insumo)}
-              rotulo={`Movimentar estoque de ${insumo.nome}`}
-              className="text-carameloForte"
-            >
-              <PackagePlus size={16} strokeWidth={1.5} aria-hidden="true" />
-            </BotaoAcao>
-            <BotaoAcao
-              onClick={() => aoEditar(insumo)}
-              rotulo={`Editar ${insumo.nome}`}
-              className="text-textoSuave"
-            >
-              <Pencil size={16} strokeWidth={1.5} aria-hidden="true" />
-            </BotaoAcao>
-            <BotaoAcao
-              onClick={() => aoExcluir(insumo)}
-              rotulo={`Excluir ${insumo.nome}`}
-              className="text-textoSuave hover:text-perigo"
-            >
-              <Trash2 size={16} strokeWidth={1.5} aria-hidden="true" />
-            </BotaoAcao>
-          </li>
-        ))}
+        {insumos.map(insumo=><li key={insumo.id} className="admin-mobile-product"><div className="flex items-start justify-between gap-4"><strong className="min-w-0 flex-1 text-sm font-medium">{insumo.nome}</strong><span className="flex-none text-right font-numero text-sm font-semibold">{insumo.quantidade_atual} {insumo.unidade_medida}<span className="mt-1 block text-xs font-normal text-textoSuave">Disponível</span></span></div><p className="mt-2 text-xs text-textoSuave">Mínimo: {insumo.quantidade_minima} {insumo.unidade_medida} · {formatarMoeda(insumo.custo_unitario)}/un.</p><div className="mt-3"><Situacao insumo={insumo}/></div><div className="admin-mobile-actions"><button aria-label={'Movimentar estoque de '+insumo.nome} onClick={()=>aoMovimentar(insumo)}><PackagePlus size={14} aria-hidden="true"/>Movimentar</button><button aria-label={'Editar '+insumo.nome} onClick={()=>aoEditar(insumo)}><Pencil size={14} aria-hidden="true"/>Editar</button><button aria-label={'Excluir '+insumo.nome} onClick={()=>aoExcluir(insumo)}><Trash2 size={14} aria-hidden="true"/>Excluir</button></div></li>)}
       </ul>
 
       {/* DESKTOP: tabela. */}
@@ -107,7 +62,7 @@ export function TabelaInsumos({
               return (
                 <tr
                   key={insumo.id}
-                  className="border-b border-borda transition-colors last:border-0 hover:bg-areia/50"
+                  className={`border-b border-borda transition-colors last:border-0 hover:bg-areia/50 ${abaixo ? "admin-stock-alert" : ""}`}
                 >
                   <td className="px-4 py-3">
                     <b className="block font-medium text-tinta">{insumo.nome}</b>
@@ -128,7 +83,7 @@ export function TabelaInsumos({
                     </span>
                   </td>
                   <td className="text-right font-numero tabular-nums text-tinta px-4 py-3">
-                    R$ {insumo.custo_unitario.toFixed(2)}
+                    {formatarMoeda(insumo.custo_unitario)}
                   </td>
                   <td className="px-4 py-3">
                     <Situacao insumo={insumo} />

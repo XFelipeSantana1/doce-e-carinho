@@ -23,18 +23,18 @@ export function BarraSuperior({
   const { pathname } = useLocation();
 
   return (
-    <header className="hidden border-b border-borda bg-creme md:block">
-      <div className="mx-auto flex h-14 max-w-5xl items-stretch gap-1 px-4 md:px-8">
+    <header className="admin-top-header hidden lg:block">
+      <div className="admin-top-inner">
         {/* O wordmark/lead leva para o Resumo. */}
         <Link
           to="/painel"
-          className="flex items-center pr-4"
+          className="admin-brand-link"
           aria-label="Doce & Carinho — ir para o Resumo"
         >
           <MarcaWordmark />
         </Link>
 
-        <nav aria-label="Navegação do painel" className="flex flex-1 items-stretch">
+        <nav aria-label="Navegação do painel" className="admin-top-nav">
           {ITENS_MENU.map((item) => {
             const ativo = pathname === item.rota;
             return (
@@ -44,12 +44,10 @@ export function BarraSuperior({
                 end
                 aria-current={ativo ? "page" : undefined}
                 className={({ isActive }) =>
-                  `relative flex items-stretch px-3 text-sm transition-colors ${
-                    isActive ? "font-semibold text-tinta" : "text-textoSuave hover:text-tinta"
-                  }`
+                  isActive ? 'admin-top-link is-active' : 'admin-top-link'
                 }
               >
-                {({ isActive }) => (
+                {() => (
                   <>
                     <span className="flex items-center gap-2">
                       {item.rotulo}
@@ -57,12 +55,7 @@ export function BarraSuperior({
                           desenha (mesma regra do menu antigo). */}
                       {item.contagem === undefined ? null : <ContadorMenu valor={pendentes} />}
                     </span>
-                    <span
-                      aria-hidden="true"
-                      className={`absolute inset-x-3 bottom-0 h-0.5 bg-caramelo ${
-                        isActive ? "" : "hidden"
-                      }`}
-                    />
+
                   </>
                 )}
               </NavLink>

@@ -26,6 +26,7 @@ import {
 // Recarrega após cada escrita: dado fresco no painel.
 // Dados de escrita do formulário de produto: usados no criar e no atualizar.
 export interface DadosProdutoBasico {
+  ficha_tecnica?: ItemFicha[];
   nome?: string;
   descricao?: string | null;
   preco?: number;

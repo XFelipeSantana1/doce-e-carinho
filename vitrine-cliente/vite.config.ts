@@ -6,4 +6,6 @@ import react from "@vitejs/plugin-react";
 // então o mesmo build serve contra localhost ou contra a API publicada.
 export default defineConfig({
   plugins: [react()],
+  server: { proxy: { "/api": "http://localhost:3000", "/uploads": "http://localhost:3000" } },
+  preview: { proxy: { "/api": "http://localhost:3000", "/uploads": "http://localhost:3000" } },
 });

@@ -117,8 +117,9 @@ export function useJanelaProduto(acoes: AcoesProduto): {
           preco: dados.preco,
           categoria_id: dados.categoria_id,
           imagem_url: dados.imagem_url || null,
+          ficha_tecnica: dados.ficha,
         });
-        await acoes.salvarFicha(alvo.id, dados.ficha);
+
       });
     },
     confirmarExclusao: async () => {

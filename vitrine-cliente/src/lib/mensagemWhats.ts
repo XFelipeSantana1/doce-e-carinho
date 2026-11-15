@@ -1,3 +1,4 @@
+import { textoRecebimento, type DadosRecebimento } from "./recebimento";
 import type { ItemCarrinho } from "../types";
 import { formatarMoeda } from "./formatarMoeda";
 
@@ -33,14 +34,16 @@ export function montarMensagemPedido(
   itens: ItemCarrinho[],
   nomeCliente: string,
   observacao: string,
+  recebimento?: DadosRecebimento,
 ): string {
   const linhas = itens.map(
     (item) =>
       `• ${item.quantidade}x ${item.produto.nome} — ${formatarMoeda(item.produto.preco * item.quantidade)}`,
   );
-  let mensagem = `Olá! Quero fazer um pedido 🧁\n\n${linhas.join("\n")}\n\nTotal: ${formatarMoeda(calcularTotal(itens))}`;
+  let mensagem = `Olá! Quero fazer um pedido 🧁\n\n${linhas.join("\n")}\n\nSubtotal dos produtos: ${formatarMoeda(calcularTotal(itens))}`;
   if (nomeCliente.trim() !== "") mensagem += `\nNome: ${nomeCliente.trim()}`;
   if (observacao.trim() !== "") mensagem += `\nObs: ${observacao.trim()}`;
+  if (recebimento) mensagem += textoRecebimento(recebimento);
   return mensagem;
 }
 

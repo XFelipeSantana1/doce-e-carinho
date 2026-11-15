@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { estaDisponivel } from "../lib/disponibilidade";
 import type { ItemCarrinho, Produto } from "../types";
 import { calcularTotal, contarUnidades } from "../lib/mensagemWhats";
 
@@ -50,7 +51,7 @@ export function useCarrinho(produtos: Produto[]): {
       Object.entries(mapa)
         .map(([id, quantidade]) => {
           const produto = produtos.find((item) => item.id === Number(id));
-          return produto ? { produto, quantidade } : null;
+          return produto && Number.isInteger(quantidade) && quantidade > 0 ? { produto, quantidade } : null;
         })
         .filter((item): item is ItemCarrinho => item !== null),
     [mapa, produtos],
@@ -62,10 +63,11 @@ export function useCarrinho(produtos: Produto[]): {
 
   // Entrada com quantidade escolhida (tela de confirmação do card).
   function adicionarVarios(produtoId: number, quantidade: number): void {
-    if (quantidade <= 0) return;
+    const produto = produtos.find(item => item.id === produtoId);
+    if (!produto || !estaDisponivel(produto) || !Number.isInteger(quantidade) || quantidade <= 0) return;
     definirMapa((anterior) => ({
       ...anterior,
-      [produtoId]: (anterior[produtoId] ?? 0) + quantidade,
+      [produtoId]: Math.min(produto.quantidadeDisponivel ?? 999, (Number.isInteger(anterior[produtoId]) ? anterior[produtoId] : 0) + quantidade),
     }));
   }
 
@@ -79,8 +81,10 @@ export function useCarrinho(produtos: Produto[]): {
 
   // Soma ou subtrai; zerou, remove o item (sacola nunca guarda quantidade 0).
   function alterarQuantidade(produtoId: number, diferenca: number): void {
+    const produto = produtos.find(item => item.id === produtoId);
+    if (!produto || !Number.isInteger(diferenca) || (diferenca > 0 && !estaDisponivel(produto))) return;
     definirMapa((anterior) => {
-      const nova = (anterior[produtoId] ?? 0) + diferenca;
+      const nova = Math.min(produto.quantidadeDisponivel ?? 999, (anterior[produtoId] ?? 0) + diferenca);
       if (nova <= 0) {
         const copia = { ...anterior };
         delete copia[produtoId];
