@@ -48,9 +48,40 @@ test('fluxo HTTP de pedidos com banco MySQL isolado', async t => {
   const status=(id:number,atual:string,novo:string)=>call('/pedidos/'+id+'/status',{status:novo,status_atual:atual},'PATCH');
   const pagar=(id:number)=>call('/pedidos/'+id+'/pagamento',{status_pagamento:'pago'},'PATCH');
   const codigo=async(id:number)=>{const [rows]=await pool!.query<mysql.RowDataPacket[]>('SELECT codigo_entrega FROM pedidos WHERE id=?',[id]);return rows[0].codigo_entrega as string;};
+  await t.test('consulta do bot vincula pedido ao cliente autorizado e não expõe código ou cadastro',async()=>{
+   process.env.BOT_TEST_PHONE='5515000000000';
+   const novo=await criar();assert.equal(novo.status,201);const id=novo.body.id;
+   const own=await call('/bot/pedidos/'+id+'?whatsapp=5515000000000',undefined,'GET');
+   assert.equal(own.status,200);
+   assert.deepEqual(Object.keys(own.body).sort(),['id','status','status_pagamento','tipo_recebimento']);
+   assert.equal((await call('/bot/pedidos/'+id+'?whatsapp=5515111111111',undefined,'GET')).status,403);
+   assert.equal((await call('/bot/pedidos/'+id+'?whatsapp=5515000000000',undefined,'GET',false)).status,401);
+   await pool!.query("INSERT INTO clientes (nome,whatsapp) VALUES ('Outro cliente','5515111111111')");
+   const [other]=await pool!.query<mysql.RowDataPacket[]>("SELECT id FROM clientes WHERE whatsapp='5515111111111'");
+   await pool!.query('UPDATE pedidos SET cliente_id=? WHERE id=?',[other[0].id,id]);
+   assert.equal((await call('/bot/pedidos/'+id+'?whatsapp=5515000000000',undefined,'GET')).status,404);
+  });
   await t.test('rotas exigem autenticação e entrega recusa dinheiro/cartão antes da cotação',async()=>{
    assert.equal((await call('/pedidos',undefined,'GET',false)).status,401);
    for(const forma of ['dinheiro','cartao']) assert.equal((await criar('entrega',forma)).status,400);
+  });
+  await t.test('mesma chave não duplica pedido ou baixa e preço divergente é recusado',async()=>{
+   const chave=randomUUID();
+   const body={whatsapp:'5515000000000',nome_cliente:'Teste',tipo_recebimento:'retirada',forma_pagamento:'pix',itens:[{produto_id:1,quantidade:1}],chave_idempotencia:chave,valor_produtos_confirmado:5};
+   const primeiro=await call('/bot/pedidos',body);assert.equal(primeiro.status,201);
+   const repetido=await call('/bot/pedidos',body);assert.equal(repetido.status,200);assert.equal(repetido.body.id,primeiro.body.id);
+   const [movimentos]=await pool!.query<mysql.RowDataPacket[]>('SELECT COUNT(*) AS n FROM movimentacoes_estoque WHERE pedido_id=?',[primeiro.body.id]);assert.equal(Number(movimentos[0].n),1);
+   const divergente=await call('/bot/pedidos',{...body,chave_idempotencia:randomUUID(),valor_produtos_confirmado:4});assert.equal(divergente.status,409);
+  });
+  await t.test('soma consumo de ingrediente compartilhado e desfaz pedido sem estoque suficiente',async()=>{
+   await pool!.query("INSERT INTO produtos (id,nome,preco) VALUES (2,'Outro doce teste',6)");
+   await pool!.query('INSERT INTO produto_insumo (produto_id,insumo_id,quantidade_necessaria) VALUES (2,1,2)');
+   const [antes]=await pool!.query<mysql.RowDataPacket[]>('SELECT quantidade_atual FROM insumos WHERE id=1');
+   await pool!.query('UPDATE insumos SET quantidade_atual=3 WHERE id=1');
+   try {
+    const r=await call('/bot/pedidos',{whatsapp:'5515000000000',tipo_recebimento:'retirada',forma_pagamento:'pix',itens:[{produto_id:1,quantidade:1},{produto_id:2,quantidade:1}],chave_idempotencia:randomUUID()});assert.equal(r.status,409);assert.match(r.body.erro,/Estoque insuficiente/);
+    const [saldo]=await pool!.query<mysql.RowDataPacket[]>('SELECT quantidade_atual FROM insumos WHERE id=1');assert.equal(Number(saldo[0].quantidade_atual),3);
+   } finally {await pool!.query('UPDATE insumos SET quantidade_atual=? WHERE id=1',[antes[0].quantidade_atual]);}
   });
   await t.test('retirada: pagamento bloqueia preparo, código incorreto não conclui, correto é consumido',async()=>{
    const novo=await criar('retirada','dinheiro');assert.equal(novo.status,201);const id=novo.body.id;

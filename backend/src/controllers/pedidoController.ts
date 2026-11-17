@@ -10,6 +10,23 @@ import { validarCotacao, ErroEntrega, type CotacaoEntrega } from '../services/en
 
 class ErroNegocio extends Error {}
 
+/** Consulta mínima do cliente do bot: nunca expõe código, endereço ou outros clientes. */
+export async function consultarViaBot(req: Request, res: Response) {
+  const id = Number(req.params.id);
+  const whatsapp = req.query.whatsapp;
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof whatsapp !== 'string' || !/^\d{10,15}$/.test(whatsapp)) {
+    return res.status(400).json({ erro: 'Informe o pedido e o telefone.' });
+  }
+  if (!process.env.BOT_TEST_PHONE || whatsapp !== process.env.BOT_TEST_PHONE) {
+    return res.status(403).json({ erro: 'Consulta restrita ao cliente de teste.' });
+  }
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT p.id,p.status,p.status_pagamento,p.tipo_recebimento
+     FROM pedidos p JOIN clientes c ON c.id=p.cliente_id WHERE p.id=? AND c.whatsapp=?`, [id,whatsapp]);
+  if (!rows[0]) return res.status(404).json({ erro: 'Pedido não encontrado para este telefone.' });
+  return res.json(rows[0]);
+}
+
 /** Produto lendo preço e nome na mesma consulta do pedido. */
 interface LinhaProduto extends RowDataPacket {
   id: number;
@@ -178,6 +195,7 @@ export async function criarViaBot(req: Request, res: Response) {
     let valorTotal = 0;
     const itensParaInserir: ItemPronto[] = [];
     const baixasDeEstoque: { insumo_id: number; quantidade: number }[] = [];
+    const reservadoNoPedido = new Map<number, number>();
 
     for (const item of itensNormalizados) {
       const [produtoRows] = await conexao.query<LinhaProduto[]>(
@@ -212,10 +230,12 @@ export async function criarViaBot(req: Request, res: Response) {
         );
         const disponivel = insumoRows[0]?.quantidade_atual ?? 0;
 
-        if (disponivel < necessario) {
+        const acumulado = (reservadoNoPedido.get(ingrediente.insumo_id) ?? 0) + necessario;
+        if (disponivel < acumulado) {
           throw new ErroNegocio(`Estoque insuficiente para o produto "${produto.nome}".`);
         }
 
+        reservadoNoPedido.set(ingrediente.insumo_id, acumulado);
         baixasDeEstoque.push({ insumo_id: ingrediente.insumo_id, quantidade: necessario });
       }
     }

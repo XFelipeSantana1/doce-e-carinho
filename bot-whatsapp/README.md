@@ -43,7 +43,7 @@ reinicia a sacola antes da confirmação. Não cancela pedidos já registrados.
 
 Mensagens da vitrine sem observações são conferidas pelo cardápio real.
 Com observações especiais, o bot pausa para atendimento humano e não registra
-o pedido automaticamente. Esta versão não interpreta áudios nem usa IA.
+o pedido automaticamente. Esta versão não interpreta áudios. O Gemini pode interpretar texto quando configurado; veja [a coordenação entre IA e fluxo manual](COORDENACAO-IA.md).
 Os pedidos são para retirada; horário e pagamento são combinados com a loja.
 Selecionar Pix não cobra nem confirma recebimento de dinheiro.
 
@@ -82,3 +82,13 @@ da loja e percorre as opções. O computador, Docker e API precisam continuar li
 O fluxo agora permite retirada ou entrega em Tiete, Jumirim e Cerquilho. Endereco, cotacao, taxa e total sao aprovados antes da confirmacao. A saida e a Etec de Tiete no ponto do Google Maps informado pelo autor. Consulte ../backend/ENTREGAS.md para habilitar o calculo real. Sem chave de mapas configurada, a retirada funciona e a entrega oferece atendimento humano, sem confirmar uma taxa ficticia.
 
 Os avisos agora abrangem em preparo, pronto, saiu para entrega, conclusao e cancelamento, com textos diferentes para retirada e entrega. A etapa saiu para entrega e exclusiva de pedidos de entrega. O registro de avisos por etapa e persistido em avisos_pedido.
+
+## API oficial da Meta e botões
+
+O atendimento também suporta `WHATSAPP_PROVIDER=meta`, com botões de resposta, cardápio em lista paginada e webhook assinado. O provedor continua `waha` até a configuração da conta Meta e a ativação explícita dos dois serviços. Consulte [META-CLOUD-API.md](META-CLOUD-API.md) para configurar a conta, o callback HTTPS e os avisos do painel sem apagar dados ou a sessão existente.
+
+`npm test` inclui o fluxo das escolhas estruturadas e validação de assinatura. `npm run test:meta:http` verifica HTTP e Redis em containers temporários numa rede sem acesso externo, com Meta e backend simulados. Esse teste exige Docker e usa apenas recursos temporários, sem volumes do projeto.
+
+## Coordenação Gemini e fluxo manual
+
+Consulte [COORDENACAO-IA.md](COORDENACAO-IA.md) para arquitetura, configurações comerciais, contrato, testes isolados, limites e aplicação local das alterações.

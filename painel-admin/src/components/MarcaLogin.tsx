@@ -10,8 +10,7 @@ import { MarcaWordmark } from "./MarcaWordmark";
 //
 // No celular o wordmark vira uma faixa no topo, à esquerda, sem foto — o
 // rótulo de página não precisa de paisagem e a foto atrasaria o formulário.
-const FOTO_CONFEITARIA =
-  "https://images.unsplash.com/photo-1578985545062-69928b1d9587?auto=format&fit=crop&w=1200&q=80";
+const FOTO_CONFEITARIA = "/fotos/brigadeiro.jpg";
 
 export function MarcaLogin({ compacta = false }: { compacta?: boolean }): JSX.Element {
   return (

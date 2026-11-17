@@ -46,28 +46,54 @@ const reais: DependenciasAviso = {
   async registrar(id, estado) {
     await pool.query("UPDATE pedidos SET aviso_pronto_estado = ?, aviso_pronto_enviado_em = IF(? = 'enviado', CURRENT_TIMESTAMP, aviso_pronto_enviado_em) WHERE id = ?", [estado, estado, id]);
   },
-  async enviar(telefone, texto) {
-    const base = process.env.WAHA_URL;
-    const key = process.env.WAHA_API_KEY;
-    const autorizado = process.env.BOT_TEST_PHONE;
-    if (!base || !key || !autorizado) throw new FalhaAviso('falha');
-    if (canonical(telefone) !== canonical(autorizado)) throw new FalhaAviso('bloqueado');
-    if (!/^\d{10,15}$/.test(telefone)) throw new FalhaAviso('falha');
-    const headers = { 'X-Api-Key': key, 'Content-Type': 'application/json' };
-    // Resolver o contato antes do envio trata números brasileiros e identificadores LID.
-    let chatId: string;
-    try {
-      const check = await fetch(`${base}/api/contacts/check-exists?session=default&phone=${encodeURIComponent(telefone)}`, { headers, signal: AbortSignal.timeout(8000) });
-      if (!check.ok) throw new FalhaAviso('falha');
-      const contato = await check.json() as { numberExists?: boolean; chatId?: string };
-      if (!contato.numberExists || !contato.chatId) throw new FalhaAviso('falha');
-      chatId = contato.chatId;
-    } catch { throw new FalhaAviso('falha'); } // Nenhum envio foi tentado ainda.
-    const response = await fetch(`${base}/api/sendText`, { method: 'POST', headers,
-      body: JSON.stringify({ session: 'default', chatId, text: texto }), signal: AbortSignal.timeout(12000) });
-    if (!response.ok) throw new FalhaAviso(response.status >= 500 ? 'incerto' : 'falha');
-  },
+  enviar: enviarAvisoWhatsApp,
 };
+export async function enviarAvisoWhatsApp(telefone: string, texto: string): Promise<void> {
+  const provider = process.env.WHATSAPP_PROVIDER || 'waha';
+  if (provider === 'meta') {
+    const autorizado = process.env.BOT_TEST_PHONE;
+    if (!autorizado || canonical(telefone) !== canonical(autorizado)) throw new FalhaAviso('bloqueado');
+    if (!/^\d{10,15}$/.test(telefone)) throw new FalhaAviso('falha');
+    const service = process.env.BOT_SERVICE_URL;
+    const key = process.env.BOT_WEBHOOK_KEY;
+    if (!service || !key) throw new FalhaAviso('falha');
+    // O atendimento conhece a janela de 24h e mantém o token Meta fora da API.
+    let response: Response;
+    try {
+      response = await fetch(`${service.replace(/\/$/, '')}/notify`, {
+        method:'POST', headers:{'Content-Type':'application/json','x-bot-key':key},
+        body:JSON.stringify({telefone,texto}), signal:AbortSignal.timeout(20000),
+      });
+    } catch { throw new FalhaAviso('incerto'); }
+    let body: { estado?: string };
+    try { body = await response.json() as { estado?: string }; } catch { throw new FalhaAviso('incerto'); }
+    if (!response.ok || body.estado !== 'enviado') {
+      throw new FalhaAviso(body.estado === 'bloqueado' ? 'bloqueado' : body.estado === 'falha' ? 'falha' : 'incerto');
+    }
+    return;
+  }
+  if (provider !== 'waha') throw new FalhaAviso('falha');
+  const base = process.env.WAHA_URL;
+  const key = process.env.WAHA_API_KEY;
+  const autorizado = process.env.BOT_TEST_PHONE;
+  if (!base || !key || !autorizado) throw new FalhaAviso('falha');
+  if (canonical(telefone) !== canonical(autorizado)) throw new FalhaAviso('bloqueado');
+  if (!/^\d{10,15}$/.test(telefone)) throw new FalhaAviso('falha');
+  const headers = { 'X-Api-Key': key, 'Content-Type': 'application/json' };
+  // Resolver o contato antes do envio trata números brasileiros e identificadores LID.
+  let chatId: string;
+  try {
+    const check = await fetch(`${base}/api/contacts/check-exists?session=default&phone=${encodeURIComponent(telefone)}`, { headers, signal: AbortSignal.timeout(8000) });
+    if (!check.ok) throw new FalhaAviso('falha');
+    const contato = await check.json() as { numberExists?: boolean; chatId?: string };
+    if (!contato.numberExists || !contato.chatId) throw new FalhaAviso('falha');
+    chatId = contato.chatId;
+  } catch { throw new FalhaAviso('falha'); } // Nenhum envio foi tentado ainda.
+  const response = await fetch(`${base}/api/sendText`, { method: 'POST', headers,
+    body: JSON.stringify({ session: 'default', chatId, text: texto }), signal: AbortSignal.timeout(12000) });
+  if (!response.ok) throw new FalhaAviso(response.status >= 500 ? 'incerto' : 'falha');
+}
+
 export async function notificarPedidoPronto(id: number): Promise<{ estado: EstadoAviso | null }> {
   try { return await executarAvisoPronto(id, reais); }
   catch { console.error('[aviso-pronto] Não foi possível verificar o envio do pedido', id); return { estado: 'incerto' }; }
@@ -79,14 +105,14 @@ export async function notificarPedidoPronto(id: number): Promise<{ estado: Estad
 // motoboy). Nos outros status o código não diz nada e fica fora.
 export function mensagemStatus(id: number, status: string, tipo: string, codigo?: string | null): string {
   const entrega = tipo === 'entrega';
-  const comCodigo = codigo ? `\n\n🔑 Código de confirmação: *${codigo}*\nInforme este código somente ao receber o pedido, ao motorista ou na retirada na loja.` : '';
+  const comCodigo = codigo ? `\n\n*Código de confirmação: ${codigo}*\n${entrega ? 'Informe ao motorista somente quando receber o pedido.' : 'Informe à equipe somente quando retirar o pedido.'}` : '';
   const mensagens: Record<string, string> = {
-    pagamento_confirmado: `Pagamento do pedido #${id} confirmado! Obrigado.`,
-    em_preparo: `Seu pedido #${id} está em preparo! 🧁`,
-    pronto: entrega ? `Pedido #${id} pronto, aguardando a saída para entrega.${comCodigo}` : `Pedido #${id} pronto para retirada! 🧁${comCodigo}`,
-    saiu_para_entrega: `Seu pedido #${id} saiu para entrega! 🛵 O motoboy está a caminho.${comCodigo}`,
-    entregue: entrega ? `Entrega do pedido #${id} concluída. Obrigado!` : `Retirada do pedido #${id} concluída. Obrigado!`,
-    cancelado: `Seu pedido #${id} foi cancelado. Se você já pagou, fale com a loja por aqui para combinar o reembolso.`,
+    pagamento_confirmado: `*Pedido #${id} — pagamento confirmado*\n\nRecebemos a confirmação do seu pagamento.\nAvisaremos quando o preparo começar.`,
+    em_preparo: `*Pedido #${id} — em preparo* 🧁\n\nEstamos preparando seus doces.\nAvisaremos quando estiver pronto.`,
+    pronto: entrega ? `*Pedido #${id} — pronto*\n\nEstamos aguardando a saída para entrega.\nAvisaremos quando sair.${comCodigo}` : `*Pedido #${id} — pronto para retirada!* 🧁\n\n*Local de retirada*\nEtec de Tietê\nRua Manira Jacob Biscaron, 45.${comCodigo}`,
+    saiu_para_entrega: `*Pedido #${id} — saiu para entrega!* 🛵\n\nO motorista está a caminho do endereço informado.${comCodigo}`,
+    entregue: entrega ? `*Pedido #${id} — entrega concluída*\n\nObrigado por escolher a Doce & Carinho! 🧁` : `*Pedido #${id} — retirada concluída*\n\nObrigado por escolher a Doce & Carinho! 🧁`,
+    cancelado: `*Pedido #${id} — cancelado*\n\nSe já fez o pagamento, envie uma mensagem por aqui para combinar o reembolso com a loja.`,
   };
   return mensagens[status] ?? '';
 }

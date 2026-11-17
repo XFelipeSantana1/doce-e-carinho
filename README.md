@@ -168,7 +168,7 @@ O comportamento descrito em `backend/ENTREGAS.md` usa `ENTREGA_MODO=demonstracao
 - `.env`, `.env.local`, chaves, tokens, sessões, dumps de banco e dados de clientes não devem ser versionados.
 - O backup de apresentação original foi deliberadamente omitido desta cópia Git: continha telefone e histórico de pedidos associados a uma pessoa, além de hash de senha de administrador.
 - O bot está em modo de teste e limitado a um telefone autorizado. Não o habilite para clientes reais sem revisar autenticação, consentimento, observabilidade, retentativas e proteção contra abuso.
-- Fotos enviadas pelo painel ficam em `backend/uploads`; em produção precisam de volume persistente ou armazenamento de objetos e política de backup.
+- Fotos enviadas pelo painel ficam na tabela `midias`, junto do MySQL. Isso evita perder imagens quando o Codespace é recriado; inclua essa tabela nos backups. Arquivos antigos em `backend/uploads` são migrados automaticamente na inicialização da API.
 - A cotação de entrega demonstrativa não usa rotas reais. Não apresente as distâncias ou taxas fixas como cotação logística real.
 - Revise CORS, JWT, rate limiting, política de senhas, backups, logs e permissões antes de expor a API à internet.
 

@@ -49,5 +49,7 @@ test('avisos diferenciam retirada, saída para entrega e conclusão',()=>{
   assert.match(mensagemStatus(1,'saiu_para_entrega','entrega'),/saiu para entrega/);
   assert.match(mensagemStatus(1,'entregue','entrega'),/entrega.*concluída/i);
   assert.match(mensagemStatus(1,'entregue','retirada'),/retirada.*concluída/i);
-  assert.equal(mensagemStatus(1,'pagamento_confirmado','entrega'),'Pagamento do pedido #1 confirmado! Obrigado.');
+  const pagamento = mensagemStatus(1,'pagamento_confirmado','entrega');
+  assert.match(pagamento, /Pedido #1 — pagamento confirmado/);
+  assert.match(pagamento, /Avisaremos quando o preparo começar/);
 });

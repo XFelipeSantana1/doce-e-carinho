@@ -1,1 +1,14 @@
-{"name":"confeitaria-atendimento","private":true,"type":"module","scripts":{"start":"node src/server.mjs","test":"node --test"},"dependencies":{"redis":"^4.7.0"}}
+{
+  "name": "confeitaria-atendimento",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test",
+    "test:meta:http": "python3 scripts/test-meta-http.py",
+    "test:gemini:http": "python3 scripts/test-meta-http.py --gemini"
+  },
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}

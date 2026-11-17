@@ -56,7 +56,7 @@ test('cotação compacta mostra taxa e total sem atribuir distância fictícia a
   const services={telefone:'5515000000000',catalogo:async()=>produtos,cotar:async()=>({simulada:true,token:'demo',endereco:'Rua Exemplo, 123, Tietê',distancia_metros:3000,taxa_entrega:9.5})};
   const quote=await responder(state,'sem',services);assert.match(quote.text,/9,50/);assert.doesNotMatch(quote.text,/simulad|demonstra|Google Maps|\bkm\b/i);
   const accepted=await responder(quote.state,'1',services);
-  const summary=await responder(accepted.state,'pix',services);assert.doesNotMatch(summary.text,/simulad|demonstra/i);assert.match(summary.text,/22,00/);
+  const summary=await responder(accepted.state,'pix',services);assert.match(summary.text,/Pagamento demonstrativo do TCC/);assert.doesNotMatch(summary.text,/distância|\bkm\b/i);assert.match(summary.text,/22,00/);
 });
 test('quantidade inválida não adiciona itens e atendimento humano pausa respostas',async()=>{
  const services={catalogo:async()=>produtos};

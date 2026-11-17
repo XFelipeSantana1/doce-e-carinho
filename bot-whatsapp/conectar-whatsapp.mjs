@@ -25,7 +25,7 @@ async function ensureSession() {
 }
 const html = `<!doctype html><html lang="pt-BR"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Conectar WhatsApp da loja</title>
 <style>body{font:17px system-ui;background:#fdf8f3;color:#2b1e17;margin:0;padding:32px}main{max-width:620px;margin:auto;background:white;border:1px solid #e8ddd1;border-radius:16px;padding:28px}h1{font-size:26px}img{display:block;width:300px;max-width:100%;margin:24px auto}#status{font-weight:600}small{color:#6e5c4e}</style>
-<main><h1>Conectar WhatsApp da loja</h1><p>No celular com o numero <b>(15) 99648-6867</b>, abra o WhatsApp, entre em <b>Aparelhos conectados</b> e toque em <b>Conectar um aparelho</b>.</p><p id="status">Preparando QR Code…</p><button id="retry" hidden>Tentar novamente</button><img id="qr" alt="QR Code para conectar o WhatsApp da loja" hidden><small>A imagem se atualiza automaticamente. Depois da conexao, ainda precisamos ativar e testar o atendimento.</small></main>
+<main><h1>Conectar WhatsApp da loja</h1><p>No celular com o número <b>da loja</b>, abra o WhatsApp, entre em <b>Aparelhos conectados</b> e toque em <b>Conectar um aparelho</b>.</p><p id="status">Preparando QR Code…</p><button id="retry" hidden>Tentar novamente</button><img id="qr" alt="QR Code para conectar o WhatsApp da loja" hidden><small>A imagem se atualiza automaticamente. Depois da conexao, ainda precisamos ativar e testar o atendimento.</small></main>
 <script>const statusEl=document.querySelector('#status'),qr=document.querySelector('#qr');let lastQr=0;
 const retry=document.querySelector('#retry');retry.onclick=async()=>{retry.disabled=true;try{const response=await fetch('/restart',{method:'POST'});if(!response.ok)throw new Error();lastQr=0;await update();}catch{statusEl.textContent='Nao foi possivel reiniciar. Tente novamente.';}finally{retry.disabled=false;}};
 async function update(){try{const response=await fetch('/status');const state=await response.json();if(!response.ok)throw new Error();retry.hidden=!['FAILED','STOPPED'].includes(state.status);
@@ -38,10 +38,14 @@ qr.onerror=()=>{qr.hidden=true;lastQr=0};update();setInterval(update,4000);</scr
 const server = http.createServer(async (req,res) => {
   res.setHeader('Cache-Control','no-store');
   res.setHeader('X-Content-Type-Options','nosniff');
-  if (!['127.0.0.1:3003','localhost:3003'].includes(req.headers.host)) {res.writeHead(403);res.end();return;}
+  const allowedHosts = ['127.0.0.1:3003', 'localhost:3003'];
+  if (process.env.CODESPACE_NAME && process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN) {
+    allowedHosts.push(`${process.env.CODESPACE_NAME}-3003.${process.env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}`);
+  }
+  if (!allowedHosts.includes(req.headers.host)) {res.writeHead(403);res.end();return;}
   const url = new URL(req.url,'http://127.0.0.1:3003');
   if(req.method === 'POST' && url.pathname === '/restart') {
-    if(req.headers.origin !== `http://${req.headers.host}`){res.writeHead(403);res.end();return;}
+    if(![`http://${req.headers.host}`, `https://${req.headers.host}`].includes(req.headers.origin)){res.writeHead(403);res.end();return;}
     try {
       const response=await fetch(`${base}/api/sessions/default/restart`,{method:'POST',headers,signal:AbortSignal.timeout(30000)});
       res.writeHead(response.ok ? 200 : 503,{'Content-Type':'application/json'});res.end(JSON.stringify({ok:response.ok}));

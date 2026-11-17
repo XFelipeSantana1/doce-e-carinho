@@ -24,7 +24,7 @@ Serviço Node.js em JavaScript. `atendimento.n8n.json` define um webhook e encam
 
 ### Persistência e infraestrutura
 
-MySQL guarda usuários, catálogo, ficha técnica, clientes, pedidos, itens, registros, movimentações e avisos. Redis guarda estado transitório do bot. Docker Compose sobe MySQL na raiz e n8n/WAHA/Redis no pacote do bot. As imagens enviadas pelo painel são gravadas em `backend/uploads`.
+MySQL guarda usuários, catálogo, ficha técnica, clientes, pedidos, itens, registros, movimentações, avisos e as mídias enviadas pelo painel. Redis guarda estado transitório do bot. Docker Compose sobe MySQL na raiz e n8n/WAHA/Redis no pacote do bot. Arquivos antigos em `backend/uploads` são migrados para a tabela `midias` na inicialização da API.
 
 ## 3. Domínios e regras de negócio observadas
 
@@ -60,7 +60,7 @@ MySQL guarda usuários, catálogo, ficha técnica, clientes, pedidos, itens, reg
 
 ### Prioridade alta
 
-- Persistir `backend/uploads` em volume ou storage externo em produção; hoje o disco local do backend pode perder imagens em recriação/deploy.
+- Incluir a tabela `midias` nos backups e, para uma operação maior, avaliar armazenamento de objetos; as imagens novas já não dependem do disco efêmero do backend.
 - Adicionar rate limiting, Helmet, limites de requisição e política de logs/redação de dados pessoais.
 - Revisar expiração, renovação e armazenamento do JWT; avaliar cookies HttpOnly/SameSite conforme o modelo de implantação.
 - Definir política de backup/restore e migrações versionadas por release.

@@ -9,7 +9,8 @@
     "build": "node ./node_modules/typescript/bin/tsc",
     "start": "node dist/server.js",
     "test": "node --import tsx --test test/*.test.ts",
-    "test:integration": "node --import tsx --test test/integration/*.test.ts"
+    "test:integration": "node --import tsx --test test/integration/*.test.ts",
+    "seed:tradicional": "node --import tsx scripts/seedCatalogoTradicional.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
